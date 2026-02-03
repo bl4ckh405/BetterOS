@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"CrewAI": {
+			"url": "https://docs.crewai.com/mcp",
+			"type": "http"
+		}
+	},
+	"inputs": []
+}
