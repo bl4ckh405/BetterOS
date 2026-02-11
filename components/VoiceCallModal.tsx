@@ -90,6 +90,42 @@ const PulseRing = ({
   );
 };
 
+// --- Listening Animation (Breathing Effect) ---
+const ListeningAnimation = ({ color }: { color: string }) => {
+  const breatheAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(breatheAnim, {
+          toValue: 1.15,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(breatheAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.listeningRing,
+        {
+          borderColor: color,
+          transform: [{ scale: breatheAnim }],
+        },
+      ]}
+    />
+  );
+};
+
 // --- Fake Audio Visualizer Bar ---
 const AudioBar = ({
   color,
@@ -171,9 +207,21 @@ const VoiceCallContent: React.FC<Omit<VoiceCallModalProps, "visible">> = ({
   }, []);
 
   const conversation = useConversation({
-    onConnect: () => console.log("✅ Connected"),
-    onDisconnect: () => console.log("❌ Disconnected"),
-    onError: (e) => console.error("❌ Error:", e),
+    onConnect: ({ conversationId }) => {
+      console.log("✅ Connected:", conversationId);
+    },
+    onDisconnect: (details) => {
+      console.log("❌ Disconnected:", details);
+    },
+    onError: (message, context) => {
+      console.error("❌ Error:", message, context);
+    },
+    onModeChange: ({ mode }) => {
+      console.log("🔊 Mode changed:", mode);
+    },
+    onMessage: ({ message, source }) => {
+      console.log("💬 Message from", source, ":", message);
+    },
   });
 
   const startConversation = async () => {
@@ -188,12 +236,9 @@ const VoiceCallContent: React.FC<Omit<VoiceCallModalProps, "visible">> = ({
         return;
       }
 
+      console.log("Starting session with agent:", agentId);
       await conversation.startSession({
         agentId: agentId,
-        dynamicVariables: {
-          coachName: coachName,
-          systemPrompt: coachSystemPrompt,
-        },
       });
     } catch (error) {
       console.error("Failed to start conversation:", error);
@@ -215,14 +260,19 @@ const VoiceCallContent: React.FC<Omit<VoiceCallModalProps, "visible">> = ({
   const isConnected = conversation.status === "connected";
   const isConnecting = conversation.status === "connecting";
   const isDisconnected = conversation.status === "disconnected";
+  const isListening = isConnected && !conversation.isSpeaking;
 
   const getStatusText = () => {
     if (isConnecting) return "Connecting...";
-    if (isConnected)
-      return conversation.isSpeaking
-        ? `${coachName} is speaking`
-        : "Listening...";
-    return "Ready to talk";
+    if (conversation.isSpeaking) return "Speaking";
+    if (isListening) return "Listening";
+    return "Tap to start";
+  };
+
+  const getStatusColor = () => {
+    if (isConnecting) return colors.textSecondary;
+    if (isConnected) return coachColor;
+    return colors.textSecondary;
   };
 
   return (
@@ -269,6 +319,9 @@ const VoiceCallContent: React.FC<Omit<VoiceCallModalProps, "visible">> = ({
               { borderColor: isConnected ? coachColor : colors.border },
             ]}
           >
+            {isConnected && !conversation.isSpeaking && (
+              <ListeningAnimation color={coachColor} />
+            )}
             <View
               style={[
                 styles.avatarPlaceholder,
@@ -283,14 +336,27 @@ const VoiceCallContent: React.FC<Omit<VoiceCallModalProps, "visible">> = ({
             <Text style={[styles.coachName, { color: colors.text }]}>
               {coachName}
             </Text>
-            <Text
-              style={[
-                styles.statusText,
-                { color: isConnected ? coachColor : colors.textSecondary },
-              ]}
-            >
-              {getStatusText()}
-            </Text>
+            <View style={styles.statusRow}>
+              {isConnected && (
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor: coachColor,
+                      opacity: conversation.isSpeaking ? 1 : 0.6,
+                    },
+                  ]}
+                />
+              )}
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: getStatusColor() },
+                ]}
+              >
+                {getStatusText()}
+              </Text>
+            </View>
           </View>
 
           <View
@@ -374,6 +440,14 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
   },
+  listeningRing: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 3,
+    opacity: 0.4,
+  },
   contentContainer: {
     flex: 1,
     padding: 24,
@@ -423,16 +497,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 10,
   },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   coachName: {
     fontSize: 30,
     fontWeight: "700",
     marginBottom: 6,
   },
   statusText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 0.5,
   },
   visualizerContainer: {
     flexDirection: "row",
