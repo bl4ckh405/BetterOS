@@ -51,9 +51,28 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <IconSymbol 
               size={28} 
-              name={focused ? "person.2.fill" : "person.2"} 
+              name={focused ? "person.fill" : "person"} 
               color={color} 
             />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="create"
+        options={{
+          title: '',
+          tabBarIcon: ({ color }) => (
+            <View style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: colors.primary,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+            }}>
+              <IconSymbol size={28} name="plus" color={colors.background} />
+            </View>
           ),
         }}
       />
@@ -71,47 +90,22 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="create"
-        options={{
-          title: '',
-          tabBarIcon: ({ color }) => (
-            <View style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: colors.primary,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <IconSymbol size={24} name="plus" color={colors.background} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: '',
-          tabBarIcon: ({ color, focused }) => (
-            <IconSymbol 
-              size={28} 
-              name={focused ? "folder.fill" : "folder"} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: '',
           tabBarIcon: ({ color, focused }) => (
             <IconSymbol 
               size={28} 
-              name={focused ? "person.fill" : "person"} 
+              name={focused ? "gear" : "gear"} 
               color={color} 
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="library"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

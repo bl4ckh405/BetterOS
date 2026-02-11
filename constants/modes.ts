@@ -15,7 +15,7 @@ export const DEFAULT_MODES: AIMode[] = [
     name: 'The Creative',
     description: 'Warm tone. Expands on ideas. "Yes, and..." mentality.',
     systemPrompt: 'You are The Creative - an encouraging creative companion. Use a warm, supportive tone. Expand on ideas with "Yes, and..." thinking. Help users explore possibilities and overcome creative blocks.',
-    color: '#4A90E2',
+    color: '#5BA3E0',
     temperature: 0.8,
     isCustom: false,
   },
@@ -32,7 +32,7 @@ export const DEFAULT_MODES: AIMode[] = [
 
 export const THEME_COLORS = {
   light: {
-    primary: '#000000',
+    primary: '#5BA3E0',
     secondary: '#666666',
     tertiary: '#999999',
     background: '#FFFFFF',
@@ -44,12 +44,12 @@ export const THEME_COLORS = {
     textTertiary: '#999999',
     accent: {
       boss: '#FF6B35',
-      creative: '#4A90E2',
+      creative: '#5BA3E0',
       stoic: '#7B68EE',
     },
   },
   dark: {
-    primary: '#FFFFFF',
+    primary: '#5BA3E0',
     secondary: '#B3B3B3',
     tertiary: '#808080',
     background: '#000000',
@@ -61,7 +61,7 @@ export const THEME_COLORS = {
     textTertiary: '#808080',
     accent: {
       boss: '#FF8A65',
-      creative: '#64B5F6',
+      creative: '#5BA3E0',
       stoic: '#9575CD',
     },
   },

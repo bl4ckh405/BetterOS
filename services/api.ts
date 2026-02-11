@@ -86,6 +86,9 @@ export class APIService {
         throw new Error('Coach not found');
       }
 
+      // Get user's Orbit profile for context
+      const userProfile = await databaseService.getUserProfile();
+
       const response = await fetch(`${API_BASE_URL}/chat/message`, {
         method: 'POST',
         headers: {
@@ -104,7 +107,14 @@ export class APIService {
             background: coach.background,
             conversationStyle: coach.conversation_style,
             systemPrompt: coach.system_prompt
-          }
+          },
+          userContext: userProfile ? {
+            coreValues: userProfile.core_values,
+            fiveYearGoal: userProfile.five_year_goal,
+            oneYearGoal: userProfile.one_year_goal,
+            tenYearGoal: userProfile.ten_year_goal,
+            currentAnxieties: userProfile.current_anxieties,
+          } : null
         }),
       });
 

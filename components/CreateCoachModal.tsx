@@ -3,7 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert,
 import { useTheme } from '@/hooks/use-theme';
 import { useCoaches } from '@/contexts/CoachContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { authService } from '@/services/auth';
 import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/services/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -45,7 +47,7 @@ export default function CreateCoachModal({ visible, onClose }: CreateCoachModalP
 
   const handleImageUpload = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -75,6 +77,38 @@ export default function CreateCoachModal({ visible, onClose }: CreateCoachModalP
     }
     
     try {
+      const userId = authService.getUserId();
+      let avatarUrl = coachData.image;
+
+      // Upload image to Supabase Storage if local file
+      if (coachData.image && coachData.image.startsWith('file://')) {
+        console.log('💾 Uploading image to Supabase Storage...');
+        const response = await fetch(coachData.image);
+        const arrayBuffer = await response.arrayBuffer();
+        const fileExt = coachData.image.split('.').pop() || 'jpg';
+        const fileName = `${userId}/${coachData.name.replace(/\s+/g, '-')}-${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('coach-avatars')
+          .upload(fileName, arrayBuffer, {
+            contentType: `image/${fileExt}`,
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error('❌ Upload error:', uploadError);
+          throw new Error('Failed to upload image');
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('coach-avatars')
+          .getPublicUrl(fileName);
+        
+        avatarUrl = publicUrl;
+        console.log('✅ Image uploaded:', publicUrl);
+      }
+      
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
       const response = await fetch(`${apiUrl}/api/coaches`, {
         method: 'POST',
@@ -87,8 +121,9 @@ export default function CreateCoachModal({ visible, onClose }: CreateCoachModalP
           background: coachData.background,
           conversationStyle: coachData.conversationStyle,
           color: coachData.color,
-          image: coachData.image,
+          image: avatarUrl,
           youtubeChannelUrl: coachData.youtubeChannelUrl,
+          userId,
         }),
       });
 

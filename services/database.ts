@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from './auth';
 
 export interface Coach {
   id: string;
@@ -22,6 +23,10 @@ export interface UserProfile {
   core_values: string[];
   five_year_goal: string;
   current_anxieties: string[];
+  ten_year_goal?: string;
+  one_year_goal?: string;
+  last_daily_checkin?: string;
+  last_weekly_checkin?: string;
   created_at: string;
   updated_at: string;
 }
@@ -52,11 +57,15 @@ class DatabaseService {
   // User Profile
   async saveUserProfile(profile: Omit<UserProfile, 'id' | 'created_at' | 'updated_at'>) {
     try {
+      const userId = authService.getUserId();
       const { data, error } = await supabase
         .from('user_profiles')
         .upsert({
           ...profile,
+          user_id: userId,
           updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id'
         })
         .select()
         .single();
@@ -72,11 +81,50 @@ class DatabaseService {
     }
   }
 
+  async updateCheckInTimestamp(type: 'daily' | 'weekly') {
+    try {
+      const userId = authService.getUserId();
+      const field = type === 'daily' ? 'last_daily_checkin' : 'last_weekly_checkin';
+      const timestamp = new Date().toISOString();
+      
+      console.log(`🔄 Updating ${type} check-in for user:`, userId);
+      console.log(`📅 Setting ${field} to:`, timestamp);
+      
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          [field]: timestamp,
+          updated_at: timestamp
+        })
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Update successful, returned data:', data);
+      
+      if (data) {
+        await AsyncStorage.setItem(this.PROFILE_CACHE_KEY, JSON.stringify(data));
+        console.log('💾 Cached updated profile');
+      }
+      return data;
+    } catch (error) {
+      console.error('❌ Error updating check-in timestamp:', error);
+      return null;
+    }
+  }
+
   async getUserProfile(): Promise<UserProfile | null> {
     try {
+      const userId = authService.getUserId();
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
+        .eq('user_id', userId)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
@@ -100,10 +148,12 @@ class DatabaseService {
   // Coaches
   async createCoach(coachData: Omit<Coach, 'id' | 'created_at' | 'updated_at' | 'user_id'>) {
     try {
+      const userId = authService.getUserId();
       const { data, error } = await supabase
         .from('coaches')
         .insert({
           ...coachData,
+          user_id: userId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -123,9 +173,11 @@ class DatabaseService {
 
   async getCoaches(): Promise<Coach[]> {
     try {
+      const userId = authService.getUserId();
       const { data, error } = await supabase
         .from('coaches')
         .select('*')
+        .or(`user_id.eq.${userId},user_id.is.null`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -149,7 +201,20 @@ class DatabaseService {
         .eq('id', id)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Error fetching coach:', error);
+        throw error;
+      }
+      
+      if (data) {
+        console.log('✅ Coach fetched:', {
+          id: data.id,
+          name: data.name,
+          avatar_url: data.avatar_url,
+          hasAvatar: !!data.avatar_url
+        });
+      }
+      
       return data;
     } catch (error) {
       console.error('Error fetching coach:', error);
@@ -160,10 +225,12 @@ class DatabaseService {
   // Chat Sessions
   async createChatSession(coachId: string): Promise<ChatSession> {
     try {
+      const userId = authService.getUserId();
       const { data, error } = await supabase
         .from('chat_sessions')
         .insert({
           coach_id: coachId,
+          user_id: userId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })

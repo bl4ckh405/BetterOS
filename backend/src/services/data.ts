@@ -120,6 +120,7 @@ export class DataService {
       system_prompt: systemPrompt,
       avatar_url: coach.image,
       youtube_channel_url: data.youtubeChannelUrl,
+      user_id: data.userId || null,
     });
 
     if (error) throw error;

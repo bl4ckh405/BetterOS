@@ -1,19 +1,21 @@
-import { OnboardingInterview } from "@/components/OnboardingInterview";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useOrbit } from "@/contexts/OrbitContext";
-import { useCoaches } from "@/contexts/CoachContext";
-import { useTheme } from "@/hooks/use-theme";
-import CreateCoachModal from "@/components/CreateCoachModal";
 import { ChatInterface } from "@/components/ChatInterface";
-import React, { useState, useEffect } from "react";
+import CreateCoachModal from "@/components/CreateCoachModal";
+import { OnboardingInterview } from "@/components/OnboardingInterview";
+import { useSubscriptionGate } from "@/components/SubscriptionGate";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useCoaches } from "@/contexts/CoachContext";
+import { useOrbit } from "@/contexts/OrbitContext";
+import { useTheme } from "@/hooks/use-theme";
+import React, { useEffect, useState } from "react";
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Image,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const CATEGORIES = [
   "For You",
@@ -31,25 +33,26 @@ export default function HomeScreen() {
   const { isOnboarded, loading } = useOrbit();
   const { coaches, loading: coachesLoading } = useCoaches();
   const { colors } = useTheme();
+  const { checkAccess, PaywallComponent, isProUser } = useSubscriptionGate();
   const [selectedCategory, setSelectedCategory] = useState("For You");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState<any>(null);
   const [filteredCoaches, setFilteredCoaches] = useState<any[]>([]);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     filterCoaches();
   }, [coaches, selectedCategory]);
 
-
-
   const filterCoaches = () => {
-    if (selectedCategory === 'For You') {
+    if (selectedCategory === "For You") {
       setFilteredCoaches(coaches);
     } else {
-      const filtered = coaches.filter(coach => 
-        coach.expertise?.includes(selectedCategory) ||
-        coach.personality?.includes(selectedCategory) ||
-        coach.tagline?.toLowerCase().includes(selectedCategory.toLowerCase())
+      const filtered = coaches.filter(
+        (coach) =>
+          coach.expertise?.includes(selectedCategory) ||
+          coach.personality?.includes(selectedCategory) ||
+          coach.tagline?.toLowerCase().includes(selectedCategory.toLowerCase()),
       );
       setFilteredCoaches(filtered);
     }
@@ -57,7 +60,16 @@ export default function HomeScreen() {
 
   if (loading || coachesLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
         <Text style={[{ color: colors.text }]}>Loading...</Text>
       </View>
     );
@@ -73,32 +85,44 @@ export default function HomeScreen() {
 
   if (selectedCoach) {
     return (
-      <ChatInterface
-        coachId={selectedCoach.id}
-        coachName={selectedCoach.name}
-        coachColor={selectedCoach.color}
-        onBack={() => setSelectedCoach(null)}
-      />
+      <>
+        <ChatInterface
+          coachId={selectedCoach.id}
+          coachName={selectedCoach.name}
+          coachColor={selectedCoach.color}
+          onBack={() => setSelectedCoach(null)}
+        />
+        <PaywallComponent />
+      </>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <View style={styles.headerLeft}>
           <Text style={[styles.logo, { color: colors.text }]}>BetterOS</Text>
-          <TouchableOpacity
-            style={[styles.getButton, { backgroundColor: "#007AFF" }]}
-          >
-            <Text style={styles.getButtonText}>Get Pro</Text>
-          </TouchableOpacity>
+          {!isProUser && (
+            <TouchableOpacity
+              style={[styles.getButton, { backgroundColor: "#007AFF" }]}
+              onPress={() => setShowPaywall(true)}
+            >
+              <Text style={styles.getButtonText}>Get Pro</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.createButton, { backgroundColor: "#007AFF" }]}
-            onPress={() => setShowCreateModal(true)}
+            onPress={() => {
+              if (checkAccess()) {
+                setShowCreateModal(true);
+              }
+            }}
           >
             <IconSymbol name="plus" size={16} color="white" />
             <Text style={styles.createButtonText}>Create</Text>
@@ -160,15 +184,19 @@ export default function HomeScreen() {
             <TouchableOpacity
               key={coach.id}
               style={[styles.coachCard, { backgroundColor: colors.surface }]}
-              onPress={() => setSelectedCoach(coach)}
+              onPress={() => {
+                if (checkAccess()) {
+                  setSelectedCoach(coach);
+                }
+              }}
             >
               {/* Profile Image */}
               <View
                 style={[styles.profileImage, { backgroundColor: coach.color }]}
               >
                 {coach.avatar_url ? (
-                  <Image 
-                    source={{ uri: coach.avatar_url }} 
+                  <Image
+                    source={{ uri: coach.avatar_url }}
                     style={styles.profileImageActual}
                     resizeMode="cover"
                   />
@@ -221,12 +249,13 @@ export default function HomeScreen() {
           ))}
         </View>
       </ScrollView>
-      
-      <CreateCoachModal 
-        visible={showCreateModal} 
-        onClose={() => setShowCreateModal(false)} 
+
+      <CreateCoachModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
       />
-    </View>
+      <PaywallComponent />
+    </SafeAreaView>
   );
 }
 
@@ -239,7 +268,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 16,
     paddingBottom: 16,
   },
   headerLeft: {

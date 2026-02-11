@@ -79,6 +79,7 @@ export const ConversationList: React.FC = () => {
 
   const loadConversations = async () => {
     try {
+      const userId = await import('../services/auth').then(m => m.authService.getUserId());
       const { data: sessions } = await databaseService.supabase
         .from("chat_sessions")
         .select(
@@ -93,6 +94,7 @@ export const ConversationList: React.FC = () => {
           )
         `,
         )
+        .eq('user_id', userId)
         .order("created_at", { ascending: false });
 
       if (sessions) {

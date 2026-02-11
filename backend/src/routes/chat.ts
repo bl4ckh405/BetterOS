@@ -34,7 +34,7 @@ chatRoutes.post('/message', async (req, res) => {
   try {
     console.log('📨 Received message request');
     
-    const { coachId, message, sessionId, coach: coachData }: SendMessageRequest & { coach?: any } = req.body;
+    const { coachId, message, sessionId, coach: coachData, userContext }: SendMessageRequest & { coach?: any; userContext?: any } = req.body;
     
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -45,6 +45,12 @@ chatRoutes.post('/message', async (req, res) => {
     }
 
     console.log('✅ Using coach:', coachData.name);
+    if (userContext) {
+      console.log('👤 User context provided:', {
+        coreValues: userContext.coreValues?.length || 0,
+        hasGoals: !!(userContext.fiveYearGoal || userContext.oneYearGoal),
+      });
+    }
 
     // Use provided sessionId or get from Supabase
     let currentSessionId = sessionId;
@@ -68,7 +74,7 @@ chatRoutes.post('/message', async (req, res) => {
     console.log('📚 Conversation history length:', conversationHistory.length);
     console.log('🤖 Generating AI response...');
     
-    const aiResponse = await aiService.generateResponse(coachData, message, conversationHistory);
+    const aiResponse = await aiService.generateResponse(coachData, message, conversationHistory, userContext);
     
     console.log('✅ AI response generated');
 

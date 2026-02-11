@@ -3,6 +3,10 @@ export interface UserProfile {
   coreValues: string[];
   fiveYearGoal: string;
   currentAnxieties: string[];
+  tenYearGoal?: string;
+  oneYearGoal?: string;
+  lastDailyCheckIn?: string;
+  lastWeeklyCheckIn?: string;
   createdAt: Date;
   updatedAt: Date;
 }

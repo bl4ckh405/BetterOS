@@ -1,16 +1,38 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Image } from 'react-native';
-import Markdown from 'react-native-markdown-display';
-import { useTheme } from '../hooks/use-theme';
-import { IconSymbol } from './ui/icon-symbol';
-import { supabase } from '../services/supabase';
-import { APIService } from '../services/api';
-import { databaseService } from '../services/database';
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Easing,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View,
+} from "react-native";
+import Markdown from "react-native-markdown-display";
+import { useTheme } from "../hooks/use-theme";
+import { APIService } from "../services/api";
+import { databaseService } from "../services/database";
+import { supabase } from "../services/supabase";
+import { IconSymbol } from "./ui/icon-symbol";
+import { VoiceCallModal } from "./VoiceCallModal";
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === "android") {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 interface Message {
   id: string;
   content: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   created_at: string;
   session_id: string;
 }
@@ -28,44 +50,228 @@ interface Coach {
   name: string;
   avatar_url?: string;
   color: string;
+  system_prompt?: string;
+  elevenlabs_agent_id?: string;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ coachId, coachName, coachColor, sessionId: existingSessionId, onBack }) => {
+// --- Sub-Component: Typing Indicator ---
+const TypingIndicator = ({ color }: { color: string }) => {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animate = (dot: Animated.Value, delay: number) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(dot, {
+            toValue: -6,
+            duration: 400,
+            useNativeDriver: true,
+            easing: Easing.ease,
+            delay: delay,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+            easing: Easing.ease,
+          }),
+        ]),
+      ).start();
+    };
+
+    animate(dot1, 0);
+    animate(dot2, 200);
+    animate(dot3, 400);
+  }, []);
+
+  const dotStyle = {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: color,
+    marginHorizontal: 3,
+  };
+
+  return (
+    <View style={styles.typingIndicatorContainer}>
+      <Animated.View
+        style={[dotStyle, { transform: [{ translateY: dot1 }] }]}
+      />
+      <Animated.View
+        style={[dotStyle, { transform: [{ translateY: dot2 }] }]}
+      />
+      <Animated.View
+        style={[dotStyle, { transform: [{ translateY: dot3 }] }]}
+      />
+    </View>
+  );
+};
+
+// --- Sub-Component: Animated Message Bubble ---
+const AnimatedMessageBubble = ({
+  item,
+  coachColor,
+  colors,
+}: {
+  item: Message;
+  coachColor: string;
+  colors: any;
+}) => {
+  const isUser = item.role === "user";
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.poly(4)),
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.5)),
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.messageContainer,
+        isUser ? styles.userMessage : styles.assistantMessage,
+        { opacity: fadeAnim, transform: [{ translateY }] },
+      ]}
+    >
+      <View
+        style={[
+          styles.messageBubble,
+          {
+            backgroundColor: isUser ? coachColor : colors.surface,
+            // Sophisticated border radius logic for "Chat App" feel
+            borderBottomRightRadius: isUser ? 4 : 20,
+            borderBottomLeftRadius: isUser ? 20 : 4,
+          },
+        ]}
+      >
+        {isUser ? (
+          <Text style={[styles.messageText, { color: "white" }]}>
+            {item.content}
+          </Text>
+        ) : (
+          <Markdown
+            style={{
+              body: { color: colors.text, fontSize: 16, lineHeight: 24 },
+              paragraph: { marginTop: 0, marginBottom: 8 },
+              strong: { fontWeight: "700", color: colors.text },
+              em: { fontStyle: "italic" },
+              code_inline: {
+                backgroundColor: colors.surfaceSecondary,
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 4,
+                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                fontSize: 14,
+              },
+              code_block: {
+                backgroundColor: colors.surfaceSecondary,
+                padding: 12,
+                borderRadius: 8,
+                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                fontSize: 14,
+              },
+              bullet_list: { marginBottom: 8 },
+              ordered_list: { marginBottom: 8 },
+              list_item: { marginBottom: 4 },
+              heading1: {
+                fontSize: 24,
+                fontWeight: "700",
+                marginBottom: 12,
+                color: colors.text,
+              },
+              heading2: {
+                fontSize: 20,
+                fontWeight: "700",
+                marginBottom: 10,
+                color: colors.text,
+              },
+              heading3: {
+                fontSize: 18,
+                fontWeight: "600",
+                marginBottom: 8,
+                color: colors.text,
+              },
+              blockquote: {
+                backgroundColor: colors.surfaceSecondary,
+                borderLeftWidth: 4,
+                borderLeftColor: coachColor,
+                paddingLeft: 12,
+                paddingVertical: 8,
+                marginBottom: 8,
+              },
+            }}
+          >
+            {item.content}
+          </Markdown>
+        )}
+      </View>
+    </Animated.View>
+  );
+};
+
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  coachId,
+  coachName,
+  coachColor,
+  sessionId: existingSessionId,
+  onBack,
+}) => {
   const { colors } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [typingMessage, setTypingMessage] = useState('');
-  const [sessionId, setSessionId] = useState<string>('');
+  const [sessionId, setSessionId] = useState<string>("");
   const [coach, setCoach] = useState<Coach | null>(null);
+  const [showVoiceCall, setShowVoiceCall] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     initializeChat();
     return () => {
-      // Cleanup subscription
       supabase.removeAllChannels();
     };
   }, [coachId]);
 
   const initializeChat = async () => {
     try {
-      // Load coach data
       const coachData = await databaseService.getCoach(coachId);
+      console.log('🎯 Coach data loaded:', {
+        id: coachData?.id,
+        name: coachData?.name,
+        avatar_url: coachData?.avatar_url,
+        hasAvatar: !!coachData?.avatar_url
+      });
       setCoach(coachData);
-      
+
+      const userId = await import("../services/auth").then((m) =>
+        m.authService.getUserId(),
+      );
       let currentSessionId;
-      
+
       if (existingSessionId) {
-        // Use existing session
         currentSessionId = existingSessionId;
       } else {
-        // Check for existing session or create new one
         const { data: existingSessions } = await supabase
-          .from('chat_sessions')
-          .select('id')
-          .eq('coach_id', coachId)
-          .order('created_at', { ascending: false })
+          .from("chat_sessions")
+          .select("id")
+          .eq("coach_id", coachId)
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
           .limit(1);
 
         if (existingSessions && existingSessions.length > 0) {
@@ -74,45 +280,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ coachId, coachName
           currentSessionId = await APIService.createChatSession(coachId);
         }
       }
-      
+
       setSessionId(currentSessionId);
 
-      // Load existing messages
       const { data: existingMessages } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('session_id', currentSessionId)
-        .order('created_at', { ascending: true });
+        .from("messages")
+        .select("*")
+        .eq("session_id", currentSessionId)
+        .order("created_at", { ascending: true });
 
       if (existingMessages) {
         setMessages(existingMessages);
       }
 
-      // Subscribe to realtime messages
       const channel = supabase
         .channel(`chat_${currentSessionId}`)
-        .on('postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'messages',
-            filter: `session_id=eq.${currentSessionId}`
-          }, 
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `session_id=eq.${currentSessionId}`,
+          },
           (payload) => {
             const newMessage = payload.new as Message;
-            setMessages(prev => {
-              // Prevent duplicates by checking if message already exists
-              if (prev.some(msg => msg.id === newMessage.id)) {
+            // Configure next layout animation
+            LayoutAnimation.configureNext(
+              LayoutAnimation.Presets.easeInEaseOut,
+            );
+
+            setMessages((prev) => {
+              if (prev.some((msg) => msg.id === newMessage.id)) {
                 return prev;
               }
               return [...prev, newMessage];
             });
-            setTimeout(() => flatListRef.current?.scrollToEnd(), 100);
-          }
+
+            // If we receive a message from assistant, stop loading animation
+            if (newMessage.role === "assistant") {
+              setLoading(false);
+            }
+          },
         )
         .subscribe();
     } catch (error) {
-      console.error('Error initializing chat:', error);
+      console.error("Error initializing chat:", error);
     }
   };
 
@@ -122,97 +335,63 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ coachId, coachName
     }
 
     const userMessage = inputText.trim();
-    setInputText('');
-    setLoading(true);
+    setInputText("");
+    setLoading(true); // Triggers the bubbles animation
+
+    // Auto scroll to bottom
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
+      // 1. Save User Message
       await databaseService.saveMessage({
         session_id: sessionId,
         content: userMessage,
-        role: 'user'
+        role: "user",
       });
 
-      // Show typing animation
-      let typingText = '';
-      const response = await APIService.sendMessage(coachId, userMessage, sessionId, (text) => {
-        typingText = text;
-        setTypingMessage(text);
-      });
-      
-      // Clear typing animation - realtime will show the saved message
-      setTypingMessage('');
+      // 2. Send to API (Ignore streaming callback for cleaner UI, just wait for completion)
+      // The realtime subscription will pick up the final message when it's inserted into DB
+      await APIService.sendMessage(coachId, userMessage, sessionId, () => {});
     } catch (error) {
-      console.error('Error sending message:', error);
-      setTypingMessage('');
-    } finally {
+      console.error("Error sending message:", error);
       setLoading(false);
     }
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isUser = item.role === 'user';
     return (
-      <View style={[
-        styles.messageContainer,
-        isUser ? styles.userMessage : styles.assistantMessage
-      ]}>
-        <View style={[
-          styles.messageBubble,
-          {
-            backgroundColor: isUser ? coachColor : colors.surface,
-            alignSelf: isUser ? 'flex-end' : 'flex-start',
-          }
-        ]}>
-          {isUser ? (
-            <Text style={[styles.messageText, { color: 'white' }]}>
-              {item.content}
-            </Text>
-          ) : (
-            <Markdown
-              style={{
-                body: { color: colors.text, fontSize: 16, lineHeight: 20 },
-                paragraph: { marginTop: 0, marginBottom: 8 },
-                strong: { fontWeight: '600' },
-                em: { fontStyle: 'italic' },
-                code_inline: { 
-                  backgroundColor: colors.surfaceSecondary, 
-                  paddingHorizontal: 4,
-                  borderRadius: 3,
-                  fontFamily: 'monospace'
-                },
-                code_block: { 
-                  backgroundColor: colors.surfaceSecondary, 
-                  padding: 8,
-                  borderRadius: 6,
-                  fontFamily: 'monospace'
-                },
-                bullet_list: { marginBottom: 8 },
-                ordered_list: { marginBottom: 8 },
-              }}
-            >
-              {item.content}
-            </Markdown>
-          )}
-        </View>
-      </View>
+      <AnimatedMessageBubble
+        item={item}
+        coachColor={coachColor}
+        colors={colors}
+      />
     );
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.background,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <View style={[styles.avatar, { backgroundColor: coachColor }]}>
             {coach?.avatar_url ? (
-              <Image 
-                source={{ uri: coach.avatar_url }} 
+              <Image
+                source={{ uri: coach.avatar_url }}
                 style={styles.avatarImage}
                 resizeMode="cover"
               />
@@ -220,8 +399,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ coachId, coachName
               <IconSymbol name="person" size={20} color="white" />
             )}
           </View>
-          <Text style={[styles.coachName, { color: colors.text }]}>{coachName}</Text>
+          <Text style={[styles.coachName, { color: colors.text }]}>
+            {coachName}
+          </Text>
         </View>
+        <TouchableOpacity
+          onPress={() => setShowVoiceCall(true)}
+          style={[styles.callButton, { backgroundColor: coachColor }]}
+        >
+          <IconSymbol name="phone.fill" size={18} color="white" />
+        </TouchableOpacity>
       </View>
 
       {/* Messages */}
@@ -232,35 +419,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ coachId, coachName
         keyExtractor={(item) => item.id}
         style={styles.messagesList}
         contentContainerStyle={styles.messagesContent}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+        onContentSizeChange={() =>
+          flatListRef.current?.scrollToEnd({ animated: true })
+        }
+        showsVerticalScrollIndicator={false}
+        ListFooterComponent={
+          loading ? (
+            <Animated.View
+              style={[
+                styles.messageContainer,
+                styles.assistantMessage,
+                { marginTop: 4 },
+              ]}
+            >
+              <View
+                style={[
+                  styles.messageBubble,
+                  {
+                    backgroundColor: colors.surface,
+                    borderBottomLeftRadius: 4,
+                    paddingVertical: 16,
+                    paddingHorizontal: 20,
+                  },
+                ]}
+              >
+                <TypingIndicator color={colors.textSecondary} />
+              </View>
+            </Animated.View>
+          ) : null
+        }
       />
 
-      {/* Typing animation */}
-      {typingMessage && (
-        <View style={styles.messagesContent}>
-          <View style={[styles.messageContainer, styles.assistantMessage]}>
-            <View style={[styles.messageBubble, { backgroundColor: colors.surface }]}>
-              <Markdown
-                style={{
-                  body: { color: colors.text, fontSize: 16, lineHeight: 20 },
-                  paragraph: { marginTop: 0, marginBottom: 8 },
-                }}
-              >
-                {typingMessage}
-              </Markdown>
-            </View>
-          </View>
-        </View>
-      )}
-
       {/* Input */}
-      <View style={[styles.inputContainer, { borderTopColor: colors.border }]}>
+      <View
+        style={[
+          styles.inputContainer,
+          { backgroundColor: colors.background, borderTopColor: colors.border },
+        ]}
+      >
         <TextInput
-          style={[styles.textInput, { 
-            backgroundColor: colors.surface,
-            color: colors.text,
-            borderColor: colors.border
-          }]}
+          style={[
+            styles.textInput,
+            {
+              backgroundColor: colors.surface,
+              color: colors.text,
+            },
+          ]}
           value={inputText}
           onChangeText={setInputText}
           placeholder="Type a message..."
@@ -269,20 +473,33 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ coachId, coachName
           maxLength={1000}
         />
         <TouchableOpacity
-          style={[styles.sendButton, { 
-            backgroundColor: inputText.trim() ? coachColor : colors.surface,
-            opacity: loading ? 0.5 : 1
-          }]}
+          style={[
+            styles.sendButton,
+            {
+              backgroundColor: inputText.trim() ? coachColor : colors.surface,
+              transform: [{ scale: inputText.trim() ? 1 : 0.95 }],
+            },
+          ]}
           onPress={sendMessage}
           disabled={!inputText.trim() || loading}
         >
-          <IconSymbol 
-            name="arrow.up" 
-            size={20} 
-            color={inputText.trim() ? 'white' : colors.textTertiary} 
+          <IconSymbol
+            name="arrow.up"
+            size={20}
+            color={inputText.trim() ? "white" : colors.textTertiary}
           />
         </TouchableOpacity>
       </View>
+
+      {/* Voice Call Modal */}
+      <VoiceCallModal
+        visible={showVoiceCall}
+        onClose={() => setShowVoiceCall(false)}
+        coachName={coachName}
+        coachColor={coachColor}
+        coachSystemPrompt={coach?.system_prompt || ""}
+        coachAgentId={coach?.elevenlabs_agent_id}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -292,82 +509,124 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
+    paddingTop: 60,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    zIndex: 10,
   },
   backButton: {
     marginRight: 12,
+    padding: 4,
   },
   headerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   avatarImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   coachName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
+  },
+  callButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   messagesList: {
     flex: 1,
   },
   messagesContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 20,
   },
   messageContainer: {
-    marginBottom: 12,
+    marginBottom: 16,
+    width: "100%",
   },
   userMessage: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
+    alignSelf: "flex-end",
   },
   assistantMessage: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
+    alignSelf: "flex-start",
   },
   messageBubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 18,
+    maxWidth: "85%",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    // iOS Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    // Android Elevation
+    elevation: 1,
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
+    lineHeight: 24,
+  },
+  typingIndicatorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 12,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 16,
-    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === "ios" ? 32 : 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   textInput: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
-    maxHeight: 100,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginRight: 8,
+    maxHeight: 120,
     fontSize: 16,
+    lineHeight: 22,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });

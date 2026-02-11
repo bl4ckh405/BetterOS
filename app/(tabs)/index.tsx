@@ -1,100 +1,193 @@
+import Avatar from "@/components/Avatar";
+import DailyCheckInModal from "@/components/DailyCheckInModal";
+import DailyRitualsModal from "@/components/DailyRitualsModal";
+import TodaysGoalsModal from "@/components/TodaysGoalsModal";
+import LongTermGoalModal from "@/components/LongTermGoalModal";
+import WeeklyGoalsModal from "@/components/WeeklyGoalsModal";
+import { OnboardingInterview } from "@/components/OnboardingInterview";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import WeeklyCheckInModal from "@/components/WeeklyCheckInModal";
 import { useOrbit } from "@/contexts/OrbitContext";
 import { useTheme } from "@/hooks/use-theme";
-import { crewService } from "@/services/crew";
-import { goalsService, Goal, Task, Habit } from "@/services/goals";
-import React, { useState, useEffect } from "react";
+import { databaseService } from "@/services/database";
+import { Goal, goalsService, Habit, Task } from "@/services/goals";
+import { router } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Dimensions,
-  ActivityIndicator,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
 
 export default function CrewScreen() {
-  const { isOnboarded, userProfile } = useOrbit();
+  const { isOnboarded, userProfile, loadUserProfile, loading } = useOrbit();
   const { colors } = useTheme();
   const [selectedDay, setSelectedDay] = useState(new Date().getDay());
   const [activeGoalIndex, setActiveGoalIndex] = useState(0);
-  const [crewInsights, setCrewInsights] = useState<any>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
-  const [realignmentData, setRealignmentData] = useState<any>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [weeklyGoals, setWeeklyGoals] = useState<Goal[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
+  const [showWeeklyCheckIn, setShowWeeklyCheckIn] = useState(false);
+  const [showWeeklyGoals, setShowWeeklyGoals] = useState(false);
+  const [showLongTermGoal, setShowLongTermGoal] = useState(false);
+  const [showDailyRituals, setShowDailyRituals] = useState(false);
+  const [showTodaysGoals, setShowTodaysGoals] = useState(false);
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const today = new Date();
 
-  // Load all data on component mount
   useEffect(() => {
-    loadAllData();
-  }, []);
+    checkForCheckIns();
+  }, [userProfile, weeklyGoals, habits, tasks]);
 
-  // Load crew insights when user data is available
-  useEffect(() => {
-    if (isOnboarded && userProfile && goals.length > 0) {
-      loadCrewInsights();
+  const checkForCheckIns = () => {
+    if (!userProfile) return;
+
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+
+    // Daily: Show if NOT completed today OR no tasks exist for today
+    const lastDaily = userProfile.lastDailyCheckIn;
+    const hasCompletedDailyToday =
+      lastDaily && lastDaily.split("T")[0] === todayStr;
+    const hasTasksForToday = tasks.length > 0;
+
+    if (!hasCompletedDailyToday && !hasTasksForToday) {
+      setShowDailyCheckIn(true);
+      return;
     }
-  }, [isOnboarded, userProfile, goals]);
+
+    // Weekly: Show if NOT completed this week OR no weekly goals exist
+    const lastWeekly = userProfile.lastWeeklyCheckIn;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = weekStart.toISOString().split("T")[0];
+    const hasCompletedWeeklyThisWeek =
+      lastWeekly && lastWeekly.split("T")[0] >= weekStartStr;
+    const hasWeeklyGoalsSet = weeklyGoals.length > 0;
+
+    if (!hasCompletedWeeklyThisWeek && !hasWeeklyGoalsSet) {
+      setShowWeeklyCheckIn(true);
+    }
+  };
+
+  const handleDailyCheckInComplete = async () => {
+    await databaseService.updateCheckInTimestamp("daily");
+    await loadUserProfile();
+    setShowDailyCheckIn(false);
+    // Reload only tasks without showing loading spinner
+    const tasksData = await goalsService.getTodaysTasks();
+    setTasks(tasksData);
+  };
+
+  const handleWeeklyCheckInComplete = async () => {
+    await databaseService.updateCheckInTimestamp("weekly");
+    await loadUserProfile();
+    setShowWeeklyCheckIn(false);
+    const weeklyGoalsData = await goalsService.getGoals("weekly");
+    setWeeklyGoals(weeklyGoalsData);
+  };
+
+  const handleWeeklyGoalsComplete = async () => {
+    const weeklyGoalsData = await goalsService.getGoals("weekly");
+    setWeeklyGoals(weeklyGoalsData);
+  };
+
+  const handleLongTermGoalComplete = async () => {
+    const longTermGoals = await goalsService.getGoals("long_term");
+    setGoals(longTermGoals);
+  };
+
+  const handleDailyRitualsComplete = async () => {
+    const habitsData = await goalsService.getHabits();
+    setHabits(habitsData);
+  };
+
+  const handleTodaysGoalsComplete = async () => {
+    const tasksData = await goalsService.getTodaysTasks();
+    setTasks(tasksData);
+  };
+
+  useEffect(() => {
+    if (!loading && isOnboarded) {
+      loadAllData();
+    } else if (!loading && !isOnboarded) {
+      setIsLoadingData(false);
+    }
+  }, [loading, isOnboarded]);
 
   const loadAllData = async () => {
     try {
       setIsLoadingData(true);
-      const [goalsData, tasksData, habitsData] = await Promise.all([
-        goalsService.getGoals(),
-        goalsService.getTodaysTasks(),
-        goalsService.getHabits(),
-      ]);
-      
-      setGoals(goalsData);
+      const [longTermGoals, weeklyGoals, tasksData, habitsData] =
+        await Promise.all([
+          goalsService.getGoals("long_term"),
+          goalsService.getGoals("weekly"),
+          goalsService.getTodaysTasks(),
+          goalsService.getHabits(),
+        ]);
+
+      setGoals(longTermGoals);
+      setWeeklyGoals(weeklyGoals);
       setTasks(tasksData);
       setHabits(habitsData);
     } catch (error) {
-      console.error('Failed to load data:', error);
+      console.error("Failed to load data:", error);
     } finally {
       setIsLoadingData(false);
     }
   };
 
-  const loadCrewInsights = async () => {
-    try {
-      setIsLoadingInsights(true);
-      const userContext = {
-        values: userProfile?.coreValues || [],
-        five_year_goal: userProfile?.fiveYearGoal || '',
-        anxieties: userProfile?.currentAnxieties || [],
-        goals: goals.map(g => ({ title: g.title, progress: g.progress })),
-        todos: tasks.map(t => t.title)
-      };
-      
-      const [insights, realignment] = await Promise.all([
-        crewService.getHomescreenInsights(userContext),
-        crewService.getRealignment(userContext)
-      ]);
-      
-      setCrewInsights(insights);
-      setRealignmentData(realignment);
-    } catch (error) {
-      console.error('Failed to load crew insights:', error);
-    } finally {
-      setIsLoadingInsights(false);
-    }
-  };
+  const completedHabits = habits.filter((h) => h.completed_today).length;
 
-  const completedHabits = habits.filter(h => h.completed_today).length;
+  // DEBUG: Log the actual state
+  console.log("🔍 DEBUG STATE:", {
+    loading,
+    isOnboarded,
+    userProfile,
+    hasGoals: goals.length,
+    hasWeeklyGoals: weeklyGoals.length,
+    hasTasks: tasks.length,
+    hasHabits: habits.length,
+  });
 
-  if (isLoadingData) {
+  // Show onboarding first, before any loading states
+  if (!isOnboarded && !loading) {
+    console.log("✅ Showing OnboardingInterview");
+    return <OnboardingInterview />;
+  }
+
+  // Show loading only after onboarding check
+  if (loading || isLoadingData) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary, marginTop: 16 }]}>
+        <Text
+          style={[
+            styles.loadingText,
+            { color: colors.textSecondary, marginTop: 16 },
+          ]}
+        >
           Loading your data...
         </Text>
       </View>
@@ -103,6 +196,35 @@ export default function CrewScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <DailyCheckInModal
+        visible={showDailyCheckIn}
+        onComplete={handleDailyCheckInComplete}
+      />
+      <WeeklyCheckInModal
+        visible={showWeeklyCheckIn}
+        onComplete={handleWeeklyCheckInComplete}
+      />
+      <WeeklyGoalsModal
+        visible={showWeeklyGoals}
+        onClose={() => setShowWeeklyGoals(false)}
+        onComplete={handleWeeklyGoalsComplete}
+      />
+      <LongTermGoalModal
+        visible={showLongTermGoal}
+        onClose={() => setShowLongTermGoal(false)}
+        onComplete={handleLongTermGoalComplete}
+      />
+      <DailyRitualsModal
+        visible={showDailyRituals}
+        onClose={() => setShowDailyRituals(false)}
+        onComplete={handleDailyRitualsComplete}
+      />
+      <TodaysGoalsModal
+        visible={showTodaysGoals}
+        onClose={() => setShowTodaysGoals(false)}
+        onComplete={handleTodaysGoalsComplete}
+      />
+
       {/* Compact Header */}
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <View>
@@ -121,90 +243,189 @@ export default function CrewScreen() {
             { backgroundColor: colors.accent.boss },
           ]}
         >
-          <IconSymbol
-            name="exclamationmark.triangle.fill"
-            size={16}
-            color="white"
-          />
+          <Avatar seed={userProfile?.id || "default"} size={40} />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Goals Carousel */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Goals</Text>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(e.nativeEvent.contentOffset.x / (width - 40));
-              setActiveGoalIndex(index);
-            }}
-            decelerationRate="fast"
-            snapToInterval={width - 40}
-            snapToAlignment="start"
-            style={styles.goalsScroll}
-            contentContainerStyle={{ paddingRight: 20 }}
-          >
-            {goals.map((goal, index) => (
-              <View
-                key={goal.id}
-                style={{ width: width - 40, paddingRight: index < goals.length - 1 ? 12 : 0 }}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Long-term Goals
+            </Text>
+            <TouchableOpacity 
+              onPress={() => setShowLongTermGoal(true)}
+              style={styles.addIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          {goals.length > 0 ? (
+            <>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) => {
+                  const index = Math.round(
+                    e.nativeEvent.contentOffset.x / (width - 40),
+                  );
+                  setActiveGoalIndex(index);
+                }}
+                decelerationRate="fast"
+                snapToInterval={width - 40}
+                snapToAlignment="start"
+                style={styles.goalsScroll}
+                contentContainerStyle={{ paddingRight: 20 }}
               >
-                <TouchableOpacity
-                  style={[styles.goalCard, { backgroundColor: colors.surface }]}
-                >
-                  <View style={styles.goalHeader}>
-                    <Text style={[styles.goalTitle, { color: colors.text }]}>{goal.title}</Text>
-                    <Text style={[styles.goalProgress, { color: colors.accent.creative }]}>
-                      {goal.progress}%
-                    </Text>
-                  </View>
-                  <Text style={[styles.goalDeadline, { color: colors.textSecondary }]}>
-                    {goal.deadline_days} days left
-                  </Text>
-                  <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                    <View
+                {goals.map((goal, index) => (
+                  <View
+                    key={goal.id}
+                    style={{
+                      width: width - 40,
+                      paddingRight: index < goals.length - 1 ? 12 : 0,
+                    }}
+                  >
+                    <TouchableOpacity
                       style={[
-                        styles.progressFill,
-                        { width: `${goal.progress}%`, backgroundColor: colors.accent.creative },
+                        styles.goalCard,
+                        { backgroundColor: colors.surface },
                       ]}
-                    />
-                  </View>
-                  <View style={styles.milestones}>
-                    {goal.milestones.map((milestone, i) => (
-                      <View key={i} style={styles.milestone}>
+                      activeOpacity={1}
+                    >
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Optimistic update
+                          setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+                          await goalsService.deleteGoal(goal.id);
+                        }}
+                        activeOpacity={0.7}
+                      >
                         <IconSymbol
-                          name={milestone.done ? "checkmark.circle.fill" : "circle"}
-                          size={14}
-                          color={milestone.done ? colors.accent.creative : colors.textTertiary}
+                          name="xmark.circle.fill"
+                          size={24}
+                          color="#FF3B30"
                         />
-                        <Text style={[styles.milestoneText, { color: colors.textSecondary }]}>
-                          {milestone.name}
+                      </TouchableOpacity>
+                      <View style={styles.goalHeader}>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[styles.goalTitle, { color: colors.text }]}
+                          >
+                            {goal.title}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.goalProgress,
+                            { color: colors.accent.creative },
+                          ]}
+                        >
+                          {goal.progress}%
                         </Text>
                       </View>
-                    ))}
+                      <Text
+                        style={[
+                          styles.goalDeadline,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        {goal.deadline_days} days left
+                      </Text>
+                      <View
+                        style={[
+                          styles.progressBar,
+                          { backgroundColor: colors.border },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${goal.progress}%`,
+                              backgroundColor: colors.accent.creative,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <View style={styles.milestones}>
+                        {goal.milestones.map((milestone, i) => (
+                          <View key={i} style={styles.milestone}>
+                            <IconSymbol
+                              name={
+                                milestone.done
+                                  ? "checkmark.circle.fill"
+                                  : "circle"
+                              }
+                              size={14}
+                              color={
+                                milestone.done
+                                  ? colors.accent.creative
+                                  : colors.textTertiary
+                              }
+                            />
+                            <Text
+                              style={[
+                                styles.milestoneText,
+                                { color: colors.textSecondary },
+                              ]}
+                            >
+                              {milestone.name}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-          {goals.length > 1 && (
-            <View style={styles.carouselDots}>
-              {goals.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor:
-                        index === activeGoalIndex ? colors.primary : colors.border,
-                      width: index === activeGoalIndex ? 20 : 6,
-                    },
-                  ]}
-                />
-              ))}
+                ))}
+              </ScrollView>
+              {goals.length > 1 && (
+                <View style={styles.carouselDots}>
+                  {goals.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.dot,
+                        {
+                          backgroundColor:
+                            index === activeGoalIndex
+                              ? colors.primary
+                              : colors.border,
+                          width: index === activeGoalIndex ? 20 : 6,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <View
+              style={[
+                styles.emptyState,
+                { backgroundColor: colors.surface, marginTop: 12 },
+              ]}
+            >
+              <IconSymbol name="folder" size={32} color={colors.textTertiary} />
+              <Text
+                style={[
+                  styles.emptyStateText,
+                  { color: colors.textSecondary, marginTop: 8 },
+                ]}
+              >
+                No long-term goals yet
+              </Text>
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                onPress={() => setShowLongTermGoal(true)}
+              >
+                <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Goals</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -213,12 +434,28 @@ export default function CrewScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Crew Insights
+              Your Crew
+            </Text>
+            <Text
+              style={[styles.sectionSubtitle, { color: colors.textSecondary }]}
+            >
+              Tap to chat
             </Text>
           </View>
           <View style={styles.crewGrid}>
             <TouchableOpacity
               style={[styles.crewCard, { backgroundColor: colors.surface }]}
+              onPress={() =>
+                router.push({
+                  pathname: "/crew-chat",
+                  params: {
+                    modeId: "boss",
+                    modeName: "The Boss",
+                    modeColor: colors.accent.boss,
+                  },
+                })
+              }
+              activeOpacity={0.7}
             >
               <View
                 style={[
@@ -233,64 +470,29 @@ export default function CrewScreen() {
                 />
               </View>
               <Text style={[styles.crewRole, { color: colors.text }]}>
-                Boss
+                The Boss
               </Text>
               <Text
                 style={[styles.crewMessage, { color: colors.textSecondary }]}
+                numberOfLines={2}
               >
-                Focus on test drives
+                Ruthless prioritization. Keep things on track.
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.crewCard, { backgroundColor: colors.surface }]}
-            >
-              <View
-                style={[styles.crewIcon, { backgroundColor: "#34C759" + "20" }]}
-              >
-                <IconSymbol
-                  name="dollarsign.circle.fill"
-                  size={18}
-                  color="#34C759"
-                />
-              </View>
-              <Text style={[styles.crewRole, { color: colors.text }]}>
-                Financial
-              </Text>
-              <Text
-                style={[styles.crewMessage, { color: colors.textSecondary }]}
-              >
-                $200 ahead
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.crewCard, { backgroundColor: colors.surface }]}
-            >
-              <View
-                style={[
-                  styles.crewIcon,
-                  { backgroundColor: colors.accent.stoic + "20" },
-                ]}
-              >
-                <IconSymbol
-                  name="brain.head.profile"
-                  size={18}
-                  color={colors.accent.stoic}
-                />
-              </View>
-              <Text style={[styles.crewRole, { color: colors.text }]}>
-                Stoic
-              </Text>
-              <Text
-                style={[styles.crewMessage, { color: colors.textSecondary }]}
-              >
-                Breathe deeply
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.crewCard, { backgroundColor: colors.surface }]}
+              onPress={() =>
+                router.push({
+                  pathname: "/crew-chat",
+                  params: {
+                    modeId: "creative",
+                    modeName: "The Creative",
+                    modeColor: colors.accent.creative,
+                  },
+                })
+              }
+              activeOpacity={0.7}
             >
               <View
                 style={[
@@ -305,12 +507,50 @@ export default function CrewScreen() {
                 />
               </View>
               <Text style={[styles.crewRole, { color: colors.text }]}>
-                Creative
+                The Creative
               </Text>
               <Text
                 style={[styles.crewMessage, { color: colors.textSecondary }]}
+                numberOfLines={2}
               >
-                Visualize success
+                Warm, expansive thinking. "Yes, and..."
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.crewCard, { backgroundColor: colors.surface }]}
+              onPress={() =>
+                router.push({
+                  pathname: "/crew-chat",
+                  params: {
+                    modeId: "stoic",
+                    modeName: "The Stoic",
+                    modeColor: colors.accent.stoic,
+                  },
+                })
+              }
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.crewIcon,
+                  { backgroundColor: colors.accent.stoic + "20" },
+                ]}
+              >
+                <IconSymbol
+                  name="brain.head.profile"
+                  size={18}
+                  color={colors.accent.stoic}
+                />
+              </View>
+              <Text style={[styles.crewRole, { color: colors.text }]}>
+                The Stoic
+              </Text>
+              <Text
+                style={[styles.crewMessage, { color: colors.textSecondary }]}
+                numberOfLines={2}
+              >
+                Process emotions with Stoic wisdom.
               </Text>
             </TouchableOpacity>
           </View>
@@ -318,9 +558,18 @@ export default function CrewScreen() {
 
         {/* Week Visualizer */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            This Week
-          </Text>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              This Week
+            </Text>
+            <TouchableOpacity 
+              onPress={() => setShowWeeklyGoals(true)}
+              style={styles.addIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -377,6 +626,148 @@ export default function CrewScreen() {
               );
             })}
           </ScrollView>
+
+          {/* Weekly Goals List */}
+          <View style={styles.weeklyGoalsContainer}>
+            {weeklyGoals.length > 0 ? (
+              weeklyGoals.map((goal) => (
+                <View
+                  key={goal.id}
+                  style={[
+                    styles.weeklyGoalItem,
+                    { backgroundColor: colors.surface },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.deleteButtonWeekly}
+                    onPress={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Optimistic update
+                      setWeeklyGoals((prev) => prev.filter((g) => g.id !== goal.id));
+                      await goalsService.deleteGoal(goal.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol
+                      name="xmark.circle.fill"
+                      size={22}
+                      color="#FF3B30"
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.weeklyGoalContent}>
+                    <View style={styles.weeklyGoalHeader}>
+                      <Text
+                        style={[styles.weeklyGoalTitle, { color: colors.text }]}
+                      >
+                        {goal.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.weeklyGoalProgress,
+                          { color: colors.accent.creative },
+                        ]}
+                      >
+                        {goal.progress}%
+                      </Text>
+                    </View>
+                    <View style={styles.weeklyGoalMilestones}>
+                      {goal.milestones.map((milestone, i) => (
+                        <TouchableOpacity
+                          key={i}
+                          style={styles.weeklyMilestone}
+                          onPress={async () => {
+                            // Optimistic update
+                            setWeeklyGoals((prev) =>
+                              prev.map((g) => {
+                                if (g.id === goal.id) {
+                                  const newMilestones = [...g.milestones];
+                                  newMilestones[i] = {
+                                    ...newMilestones[i],
+                                    done: !newMilestones[i].done,
+                                  };
+                                  const completedCount = newMilestones.filter(
+                                    (m) => m.done,
+                                  ).length;
+                                  const progress = Math.round(
+                                    (completedCount / newMilestones.length) *
+                                      100,
+                                  );
+                                  return {
+                                    ...g,
+                                    milestones: newMilestones,
+                                    progress,
+                                  };
+                                }
+                                return g;
+                              }),
+                            );
+                            await goalsService.toggleMilestone(goal.id, i);
+                          }}
+                          activeOpacity={0.6}
+                        >
+                          <View
+                            style={[
+                              styles.checkbox,
+                              {
+                                borderColor: milestone.done
+                                  ? colors.accent.creative
+                                  : colors.border,
+                              },
+                              milestone.done && {
+                                backgroundColor: colors.accent.creative,
+                              },
+                            ]}
+                          >
+                            {milestone.done && (
+                              <IconSymbol
+                                name="checkmark"
+                                size={14}
+                                color={colors.background}
+                              />
+                            )}
+                          </View>
+                          <Text
+                            style={[
+                              styles.weeklyMilestoneText,
+                              {
+                                color: colors.text,
+                                textDecorationLine: milestone.done
+                                  ? "line-through"
+                                  : "none",
+                                opacity: milestone.done ? 0.6 : 1,
+                              },
+                            ]}
+                          >
+                            {milestone.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View
+                style={[styles.emptyState, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.emptyStateText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  No weekly goals set
+                </Text>
+                <TouchableOpacity
+                  style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                  onPress={() => setShowWeeklyGoals(true)}
+                >
+                  <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Weekly Goals</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Habits */}
@@ -385,6 +776,15 @@ export default function CrewScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Daily Rituals
             </Text>
+            <TouchableOpacity 
+              onPress={() => setShowDailyRituals(true)}
+              style={styles.addIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.sectionHeader}>
             <Text
               style={[styles.sectionSubtitle, { color: colors.textSecondary }]}
             >
@@ -392,29 +792,101 @@ export default function CrewScreen() {
             </Text>
           </View>
           <View style={styles.habitsGrid}>
-            {habits.map((habit) => (
-              <TouchableOpacity
-                key={habit.id}
-                style={[styles.habitCard, { backgroundColor: colors.surface }]}
-                onPress={() => goalsService.toggleHabit(habit.id).then(loadAllData)}
+            {habits.length > 0 ? (
+              habits.map((habit) => (
+                <TouchableOpacity
+                  key={habit.id}
+                  style={[
+                    styles.habitCard,
+                    { backgroundColor: colors.surface },
+                  ]}
+                  onPress={async () => {
+                    // Optimistic update
+                    setHabits((prev) =>
+                      prev.map((h) =>
+                        h.id === habit.id
+                          ? {
+                              ...h,
+                              completed_today: !h.completed_today,
+                              streak: h.completed_today
+                                ? h.streak - 1
+                                : h.streak + 1,
+                            }
+                          : h,
+                      ),
+                    );
+                    await goalsService.toggleHabit(habit.id);
+                  }}
+                >
+                  <TouchableOpacity
+                    style={styles.deleteButtonHabit}
+                    onPress={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Optimistic update
+                      setHabits((prev) => prev.filter((h) => h.id !== habit.id));
+                      await goalsService.deleteHabit(habit.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol
+                      name="xmark.circle.fill"
+                      size={18}
+                      color="#FF3B30"
+                    />
+                  </TouchableOpacity>
+                  <IconSymbol
+                    name={
+                      habit.completed_today ? "checkmark.circle.fill" : "circle"
+                    }
+                    size={20}
+                    color={
+                      habit.completed_today
+                        ? colors.accent.creative
+                        : colors.textTertiary
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.habitName,
+                      {
+                        color: colors.text,
+                        opacity: habit.completed_today ? 0.5 : 1,
+                        textDecorationLine: habit.completed_today
+                          ? "line-through"
+                          : "none",
+                      },
+                    ]}
+                  >
+                    {habit.name}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View
+                style={[styles.emptyState, { backgroundColor: colors.surface }]}
               >
                 <IconSymbol
-                  name={habit.completed_today ? "checkmark.circle.fill" : "circle"}
-                  size={20}
-                  color={
-                    habit.completed_today ? colors.accent.creative : colors.textTertiary
-                  }
+                  name="checkmark.circle.fill"
+                  size={32}
+                  color={colors.textTertiary}
                 />
                 <Text
                   style={[
-                    styles.habitName,
-                    { color: colors.text, opacity: habit.completed_today ? 1 : 0.5 },
+                    styles.emptyStateText,
+                    { color: colors.textSecondary, marginTop: 8 },
                   ]}
                 >
-                  {habit.name}
+                  No daily rituals yet
                 </Text>
-              </TouchableOpacity>
-            ))}
+                <TouchableOpacity
+                  style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                  onPress={() => setShowDailyRituals(true)}
+                >
+                  <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Rituals</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 
@@ -424,32 +896,60 @@ export default function CrewScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Today's Focus
             </Text>
+            <TouchableOpacity 
+              onPress={() => setShowTodaysGoals(true)}
+              style={styles.addIconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+            </TouchableOpacity>
           </View>
           {isLoadingInsights ? (
-            <View style={[styles.focusCard, { backgroundColor: colors.surface }]}>
+            <View
+              style={[styles.focusCard, { backgroundColor: colors.surface }]}
+            >
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
-          ) : realignmentData?.todaysFocus ? (
-            <View style={[styles.focusCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.focusTitle, { color: colors.text }]}>
-                {realignmentData.todaysFocus}
-              </Text>
-              {realignmentData.focus[0]?.description && (
-                <Text style={[styles.focusDescription, { color: colors.textSecondary }]}>
-                  {realignmentData.focus[0].description}
-                </Text>
-              )}
-            </View>
-          ) : (
+          ) : tasks.length > 0 ? (
             tasks.slice(0, 3).map((task) => (
               <TouchableOpacity
                 key={task.id}
                 style={[styles.taskItem, { backgroundColor: colors.surface }]}
+                onPress={async () => {
+                  // Optimistic update
+                  setTasks((prev) =>
+                    prev.map((t) =>
+                      t.id === task.id ? { ...t, completed: !t.completed } : t,
+                    ),
+                  );
+                  await goalsService.toggleTask(task.id);
+                }}
               >
-                <IconSymbol 
-                  name={task.completed ? "checkmark.circle.fill" : "circle"} 
-                  size={18} 
-                  color={task.completed ? colors.accent.creative : colors.textTertiary} 
+                <TouchableOpacity
+                  style={styles.deleteButtonTask}
+                  onPress={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Optimistic update
+                    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+                    await goalsService.deleteTask(task.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol
+                    name="xmark.circle.fill"
+                    size={20}
+                    color="#FF3B30"
+                  />
+                </TouchableOpacity>
+                <IconSymbol
+                  name={task.completed ? "checkmark.circle.fill" : "circle"}
+                  size={18}
+                  color={
+                    task.completed
+                      ? colors.accent.creative
+                      : colors.textTertiary
+                  }
                 />
                 <View style={styles.taskContent}>
                   <Text style={[styles.taskText, { color: colors.text }]}>
@@ -465,25 +965,35 @@ export default function CrewScreen() {
                 </View>
               </TouchableOpacity>
             ))
+          ) : (
+            <View
+              style={[
+                styles.emptyState,
+                { backgroundColor: colors.surface, marginTop: 12 },
+              ]}
+            >
+              <IconSymbol
+                name="checkmark.circle.fill"
+                size={32}
+                color={colors.textTertiary}
+              />
+              <Text
+                style={[
+                  styles.emptyStateText,
+                  { color: colors.textSecondary, marginTop: 8 },
+                ]}
+              >
+                No tasks for today
+              </Text>
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                onPress={() => setShowTodaysGoals(true)}
+              >
+                <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Tasks</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
-
-        {/* What to Drop */}
-        {realignmentData?.drop && realignmentData.drop.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>What to Drop</Text>
-            {realignmentData.drop.slice(0, 3).map((item: any, index: number) => (
-              <View key={index} style={[styles.dropCard, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.dropTitle, { color: colors.text }]}>
-                  {item.title}
-                </Text>
-                <Text style={[styles.dropDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-                  {item.description}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* Daily Standup */}
         <View style={[styles.section, { marginBottom: 120 }]}>
@@ -492,6 +1002,8 @@ export default function CrewScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.standupCard, { backgroundColor: colors.surface }]}
+            onPress={() => router.push("/daily-standup")}
+            activeOpacity={0.7}
           >
             <View style={styles.standupHeader}>
               <View
@@ -511,69 +1023,25 @@ export default function CrewScreen() {
                     { color: colors.accent.creative },
                   ]}
                 >
-                  BRIEFING
+                  CHECK-IN
                 </Text>
               </View>
               <Text
                 style={[styles.standupTime, { color: colors.textSecondary }]}
               >
-                {crewInsights?.timestamp || '8:00 AM'}
+                5:00 PM
               </Text>
             </View>
-            {isLoadingInsights ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                  Loading insights...
-                </Text>
-              </View>
-            ) : (
-              <Text style={[styles.standupText, { color: colors.text }]}>
-                {crewInsights?.briefing || 
-                  '"Good morning. Yesterday you said you needed to focus on test drives. Is that still the priority?"'}
-              </Text>
-            )}
-            <View style={styles.standupActions}>
-              <TouchableOpacity
-                style={[
-                  styles.standupActionButton,
-                  { backgroundColor: colors.surfaceSecondary },
-                ]}
-              >
-                <Text
-                  style={[styles.standupActionText, { color: colors.text }]}
-                >
-                  Yes
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.standupActionButton,
-                  { backgroundColor: colors.surfaceSecondary },
-                ]}
-              >
-                <Text
-                  style={[styles.standupActionText, { color: colors.text }]}
-                >
-                  No
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.standupActionButtonPrimary,
-                  { backgroundColor: colors.primary },
-                ]}
-                onPress={loadCrewInsights}
-              >
-                <Text
-                  style={[
-                    styles.standupActionTextPrimary,
-                    { color: colors.background },
-                  ]}
-                >
-                  Refresh
-                </Text>
-              </TouchableOpacity>
+            <Text style={[styles.standupText, { color: colors.text }]}>
+              Time for your daily accountability check-in. Tap to review your
+              progress with your PM.
+            </Text>
+            <View style={styles.standupFooter}>
+              <IconSymbol
+                name="chevron.right"
+                size={16}
+                color={colors.textSecondary}
+              />
             </View>
           </TouchableOpacity>
         </View>
@@ -594,14 +1062,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerText: {
+    justifyContent: "center",
+  },
   greeting: {
-    fontSize: 12,
+    fontSize: 11,
     marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: "700",
   },
   realignButton: {
@@ -639,16 +1115,19 @@ const styles = StyleSheet.create({
   goalCard: {
     borderRadius: 16,
     padding: 16,
+    position: "relative",
   },
   goalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 4,
+    paddingRight: 36,
   },
   goalTitle: {
     fontSize: 20,
     fontWeight: "600",
+    marginBottom: 2,
   },
   goalProgress: {
     fontSize: 18,
@@ -746,6 +1225,64 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginTop: 6,
   },
+  weeklyGoalsContainer: {
+    marginTop: 16,
+    gap: 10,
+  },
+  weeklyGoalItem: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    position: "relative",
+  },
+  weeklyGoalContent: {
+    flex: 1,
+  },
+  weeklyGoalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingRight: 36,
+  },
+  weeklyGoalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    flex: 1,
+  },
+  weeklyGoalMilestones: {
+    gap: 10,
+  },
+  weeklyMilestone: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weeklyMilestoneText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  weeklyGoalProgress: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  emptyState: {
+    padding: 20,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  emptyStateText: {
+    fontSize: 14,
+  },
   habitsGrid: {
     gap: 10,
   },
@@ -754,7 +1291,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     padding: 14,
+    paddingRight: 42,
     borderRadius: 12,
+    position: "relative",
   },
   habitName: {
     fontSize: 14,
@@ -765,8 +1304,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     padding: 14,
+    paddingRight: 42,
     borderRadius: 12,
     marginBottom: 8,
+    position: "relative",
   },
   taskContent: {
     flex: 1,
@@ -809,7 +1350,10 @@ const styles = StyleSheet.create({
   standupText: {
     fontSize: 15,
     lineHeight: 22,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  standupFooter: {
+    alignItems: "flex-end",
   },
   standupActions: {
     flexDirection: "row",
@@ -871,5 +1415,66 @@ const styles = StyleSheet.create({
   dropDescription: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  deleteButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 999,
+    padding: 6,
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonWeekly: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 999,
+    padding: 6,
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonHabit: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 999,
+    padding: 6,
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    borderRadius: 16,
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonTask: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 999,
+    padding: 6,
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    borderRadius: 16,
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  addIconButton: {
+    padding: 4,
+    zIndex: 1000,
   },
 });

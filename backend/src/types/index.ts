@@ -41,6 +41,7 @@ export interface CreateCoachRequest {
   color: string;
   image?: string;
   youtubeChannelUrl?: string;
+  userId?: string;
 }
 
 export interface SendMessageRequest {

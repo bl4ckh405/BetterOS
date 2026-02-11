@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { databaseService, Coach } from '../services/database';
+import { authService } from '../services/auth';
 
 interface CoachContextType {
   coaches: Coach[];
@@ -41,9 +42,22 @@ export const CoachProvider: React.FC<CoachProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    loadCoaches();
+    initializeAndLoad();
+  }, []);
 
-    // Subscribe to realtime changes
+  const initializeAndLoad = async () => {
+    try {
+      await authService.initialize();
+      await loadCoaches();
+      subscribeToChanges();
+    } catch (error) {
+      console.error('Error initializing coaches:', error);
+      setLoading(false);
+    }
+  };
+
+  const subscribeToChanges = () => {
+    const userId = authService.getUserId();
     const subscription = databaseService.supabase
       .channel('coaches_changes')
       .on(
@@ -54,22 +68,28 @@ export const CoachProvider: React.FC<CoachProviderProps> = ({ children }) => {
           table: 'coaches',
         },
         (payload) => {
-          console.log('🔄 Coach change detected:', payload.eventType, payload.new?.name || payload.old?.name);
+          const newCoach = payload.new as Coach;
+          const oldCoach = payload.old as Coach;
+          
+          // Only process if coach belongs to user or is system coach
+          if (newCoach && newCoach.user_id && newCoach.user_id !== userId) return;
+          if (oldCoach && oldCoach.user_id && oldCoach.user_id !== userId) return;
+          console.log('🔄 Coach change detected:', payload.eventType, newCoach?.name || oldCoach?.name);
           
           if (payload.eventType === 'INSERT') {
-            console.log('➕ Adding new coach:', payload.new.name);
-            setCoaches(prev => [payload.new as Coach, ...prev]);
+            console.log('➕ Adding new coach:', newCoach.name);
+            setCoaches(prev => [newCoach, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
-            console.log('✏️ Updating coach:', payload.new.name);
+            console.log('✏️ Updating coach:', newCoach.name);
             setCoaches(prev => 
               prev.map(coach => 
-                coach.id === payload.new.id ? payload.new as Coach : coach
+                coach.id === newCoach.id ? newCoach : coach
               )
             );
           } else if (payload.eventType === 'DELETE') {
-            console.log('🗑️ Deleting coach:', payload.old.name);
+            console.log('🗑️ Deleting coach:', oldCoach.name);
             setCoaches(prev => 
-              prev.filter(coach => coach.id !== payload.old.id)
+              prev.filter(coach => coach.id !== oldCoach.id)
             );
           }
         }
@@ -81,7 +101,7 @@ export const CoachProvider: React.FC<CoachProviderProps> = ({ children }) => {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  };
 
   return (
     <CoachContext.Provider value={{ coaches, loading, refreshCoaches }}>

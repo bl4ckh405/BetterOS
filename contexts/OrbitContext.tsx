@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, AIMode, ChatSession } from '../types';
 import { DEFAULT_MODES } from '../constants/modes';
 import { databaseService } from '../services/database';
+import { authService } from '../services/auth';
 
 interface OrbitContextType {
   userProfile: UserProfile | null;
@@ -12,6 +13,7 @@ interface OrbitContextType {
   addChatSession: (session: ChatSession) => void;
   isOnboarded: boolean;
   loading: boolean;
+  loadUserProfile: () => Promise<void>;
 }
 
 const OrbitContext = createContext<OrbitContextType | undefined>(undefined);
@@ -22,11 +24,23 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isOnboarded = userProfile !== null;
+  const isOnboarded = userProfile !== null && 
+    userProfile.coreValues && 
+    userProfile.coreValues.length > 0;
 
   useEffect(() => {
-    loadUserProfile();
+    initializeAuth();
   }, []);
+
+  const initializeAuth = async () => {
+    try {
+      await authService.initialize();
+      await loadUserProfile();
+    } catch (error) {
+      console.error('Error initializing auth:', error);
+      setLoading(false);
+    }
+  };
 
   const loadUserProfile = async () => {
     try {
@@ -35,8 +49,12 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setUserProfileState({
           id: profile.id,
           coreValues: profile.core_values,
+          tenYearGoal: profile.ten_year_goal,
           fiveYearGoal: profile.five_year_goal,
+          oneYearGoal: profile.one_year_goal,
           currentAnxieties: profile.current_anxieties,
+          lastDailyCheckIn: profile.last_daily_checkin,
+          lastWeeklyCheckIn: profile.last_weekly_checkin,
           createdAt: new Date(profile.created_at),
           updatedAt: new Date(profile.updated_at),
         });
@@ -53,6 +71,8 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await databaseService.saveUserProfile({
         core_values: profile.coreValues,
         five_year_goal: profile.fiveYearGoal,
+        ten_year_goal: profile.tenYearGoal,
+        one_year_goal: profile.oneYearGoal,
         current_anxieties: profile.currentAnxieties,
       });
       setUserProfileState(profile);
@@ -78,6 +98,7 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addChatSession,
         isOnboarded,
         loading,
+        loadUserProfile,
       }}
     >
       {children}
