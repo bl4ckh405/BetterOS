@@ -1,6 +1,6 @@
 # BetterOS Technical Documentation
 
-**Version 1.0 | January 2025**
+**Version 1.0 | January 2026**
 
 ---
 
@@ -923,5 +923,5 @@ const [goals, tasks, habits] = await Promise.all([
 
 ---
 
-**Last Updated**: January 2025  
+**Last Updated**: January 2026  
 **Maintained By**: BetterOS Team
