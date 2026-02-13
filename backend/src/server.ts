@@ -8,6 +8,7 @@ import { chatRoutes } from './routes/chat';
 import knowledgeRoutes from './routes/knowledge';
 import crewRoutes from './routes/crew';
 import crewChatRoutes from './routes/crew-chat';
+import standupRoutes from './routes/standup';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/crew', crewRoutes);
 app.use('/api/crew', crewChatRoutes);
+app.use('/api/standup', standupRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

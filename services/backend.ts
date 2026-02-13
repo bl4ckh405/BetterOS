@@ -41,11 +41,11 @@ export class BackendService {
       });
 
       if (!response.ok) {
-        throw new Error('Backend standup endpoint not ready');
+        console.warn('Backend standup endpoint not ready, using fallback');
+        throw new Error('Using fallback');
       }
       return await response.json();
     } catch (error) {
-      console.error('Backend standup error:', error);
       // Fallback: return mock response
       const mockResponse = message 
         ? "I understand. Let me help you with that. (Backend endpoint needed for full functionality)"
