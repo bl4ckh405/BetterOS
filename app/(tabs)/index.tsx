@@ -1,15 +1,12 @@
 import Avatar from "@/components/Avatar";
-import DailyCheckInModal from "@/components/DailyCheckInModal";
 import DailyRitualsModal from "@/components/DailyRitualsModal";
-import TodaysGoalsModal from "@/components/TodaysGoalsModal";
 import LongTermGoalModal from "@/components/LongTermGoalModal";
-import WeeklyGoalsModal from "@/components/WeeklyGoalsModal";
 import { OnboardingInterview } from "@/components/OnboardingInterview";
+import TodaysGoalsModal from "@/components/TodaysGoalsModal";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import WeeklyCheckInModal from "@/components/WeeklyCheckInModal";
+import WeeklyGoalsModal from "@/components/WeeklyGoalsModal";
 import { useOrbit } from "@/contexts/OrbitContext";
 import { useTheme } from "@/hooks/use-theme";
-import { databaseService } from "@/services/database";
 import { Goal, goalsService, Habit, Task } from "@/services/goals";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -36,88 +33,14 @@ export default function CrewScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
-  const [showWeeklyCheckIn, setShowWeeklyCheckIn] = useState(false);
   const [showWeeklyGoals, setShowWeeklyGoals] = useState(false);
   const [showLongTermGoal, setShowLongTermGoal] = useState(false);
   const [showDailyRituals, setShowDailyRituals] = useState(false);
   const [showTodaysGoals, setShowTodaysGoals] = useState(false);
+  const [maxGoalCardHeight, setMaxGoalCardHeight] = useState(0);
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const today = new Date();
-
-  useEffect(() => {
-    checkForCheckIns();
-  }, [userProfile, weeklyGoals, habits, tasks]);
-
-  const checkForCheckIns = () => {
-    if (!userProfile) return;
-
-    const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
-
-    // Daily: Show if NOT completed today OR no tasks exist for today
-    const lastDaily = userProfile.lastDailyCheckIn;
-    const hasCompletedDailyToday =
-      lastDaily && lastDaily.split("T")[0] === todayStr;
-    const hasTasksForToday = tasks.length > 0;
-
-    if (!hasCompletedDailyToday && !hasTasksForToday) {
-      setShowDailyCheckIn(true);
-      return;
-    }
-
-    // Weekly: Show if NOT completed this week OR no weekly goals exist
-    const lastWeekly = userProfile.lastWeeklyCheckIn;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
-    weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString().split("T")[0];
-    const hasCompletedWeeklyThisWeek =
-      lastWeekly && lastWeekly.split("T")[0] >= weekStartStr;
-    const hasWeeklyGoalsSet = weeklyGoals.length > 0;
-
-    if (!hasCompletedWeeklyThisWeek && !hasWeeklyGoalsSet) {
-      setShowWeeklyCheckIn(true);
-    }
-  };
-
-  const handleDailyCheckInComplete = async () => {
-    await databaseService.updateCheckInTimestamp("daily");
-    await loadUserProfile();
-    setShowDailyCheckIn(false);
-    // Reload only tasks without showing loading spinner
-    const tasksData = await goalsService.getTodaysTasks();
-    setTasks(tasksData);
-  };
-
-  const handleWeeklyCheckInComplete = async () => {
-    await databaseService.updateCheckInTimestamp("weekly");
-    await loadUserProfile();
-    setShowWeeklyCheckIn(false);
-    const weeklyGoalsData = await goalsService.getGoals("weekly");
-    setWeeklyGoals(weeklyGoalsData);
-  };
-
-  const handleWeeklyGoalsComplete = async () => {
-    const weeklyGoalsData = await goalsService.getGoals("weekly");
-    setWeeklyGoals(weeklyGoalsData);
-  };
-
-  const handleLongTermGoalComplete = async () => {
-    const longTermGoals = await goalsService.getGoals("long_term");
-    setGoals(longTermGoals);
-  };
-
-  const handleDailyRitualsComplete = async () => {
-    const habitsData = await goalsService.getHabits();
-    setHabits(habitsData);
-  };
-
-  const handleTodaysGoalsComplete = async () => {
-    const tasksData = await goalsService.getTodaysTasks();
-    setTasks(tasksData);
-  };
 
   useEffect(() => {
     if (!loading && isOnboarded) {
@@ -138,7 +61,42 @@ export default function CrewScreen() {
           goalsService.getHabits(),
         ]);
 
-      setGoals(longTermGoals);
+      // Calculate deadline_days and progress dynamically
+      const enrichedGoals = longTermGoals.map((goal) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Calculate days left
+        const deadline = new Date(goal.deadline || today);
+        deadline.setHours(0, 0, 0, 0);
+        const diffTime = deadline.getTime() - today.getTime();
+        const deadline_days = Math.max(
+          0,
+          Math.ceil(diffTime / (1000 * 60 * 60 * 24)),
+        );
+
+        // Calculate progress based on time elapsed
+        const createdAt = new Date(goal.created_at);
+        createdAt.setHours(0, 0, 0, 0);
+        const totalDays = Math.ceil(
+          (deadline.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const elapsedDays = Math.ceil(
+          (today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const timeProgress =
+          totalDays > 0
+            ? Math.min(100, Math.round((elapsedDays / totalDays) * 100))
+            : 0;
+
+        return {
+          ...goal,
+          deadline_days,
+          progress: timeProgress,
+        };
+      });
+
+      setGoals(enrichedGoals);
       setWeeklyGoals(weeklyGoals);
       setTasks(tasksData);
       setHabits(habitsData);
@@ -196,33 +154,38 @@ export default function CrewScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <DailyCheckInModal
-        visible={showDailyCheckIn}
-        onComplete={handleDailyCheckInComplete}
-      />
-      <WeeklyCheckInModal
-        visible={showWeeklyCheckIn}
-        onComplete={handleWeeklyCheckInComplete}
+      <TodaysGoalsModal
+        visible={showTodaysGoals}
+        onClose={() => setShowTodaysGoals(false)}
+        onComplete={async () => {
+          setShowTodaysGoals(false);
+          const tasksData = await goalsService.getTodaysTasks();
+          setTasks(tasksData);
+        }}
       />
       <WeeklyGoalsModal
         visible={showWeeklyGoals}
         onClose={() => setShowWeeklyGoals(false)}
-        onComplete={handleWeeklyGoalsComplete}
+        onComplete={async () => {
+          const weeklyGoalsData = await goalsService.getGoals("weekly");
+          setWeeklyGoals(weeklyGoalsData);
+        }}
       />
       <LongTermGoalModal
         visible={showLongTermGoal}
         onClose={() => setShowLongTermGoal(false)}
-        onComplete={handleLongTermGoalComplete}
+        onComplete={async () => {
+          const longTermGoals = await goalsService.getGoals("long_term");
+          setGoals(longTermGoals);
+        }}
       />
       <DailyRitualsModal
         visible={showDailyRituals}
         onClose={() => setShowDailyRituals(false)}
-        onComplete={handleDailyRitualsComplete}
-      />
-      <TodaysGoalsModal
-        visible={showTodaysGoals}
-        onClose={() => setShowTodaysGoals(false)}
-        onComplete={handleTodaysGoalsComplete}
+        onComplete={async () => {
+          const habitsData = await goalsService.getHabits();
+          setHabits(habitsData);
+        }}
       />
 
       {/* Compact Header */}
@@ -234,6 +197,7 @@ export default function CrewScreen() {
               : new Date().getHours() < 18
               ? "Good afternoon"
               : "Good evening"}
+            {userProfile?.name ? `, ${userProfile.name}` : ""}
           </Text>
           <Text style={[styles.title, { color: colors.text }]}>BetterOS</Text>
         </View>
@@ -254,12 +218,16 @@ export default function CrewScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Long-term Goals
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowLongTermGoal(true)}
               style={styles.addIconButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+              <IconSymbol
+                name="plus.circle.fill"
+                size={24}
+                color={colors.primary}
+              />
             </TouchableOpacity>
           </View>
           {goals.length > 0 ? (
@@ -292,8 +260,15 @@ export default function CrewScreen() {
                       style={[
                         styles.goalCard,
                         { backgroundColor: colors.surface },
+                        maxGoalCardHeight > 0 && { height: maxGoalCardHeight },
                       ]}
                       activeOpacity={1}
+                      onLayout={(e) => {
+                        const { height } = e.nativeEvent.layout;
+                        if (height > maxGoalCardHeight) {
+                          setMaxGoalCardHeight(height);
+                        }
+                      }}
                     >
                       <TouchableOpacity
                         style={styles.deleteButton}
@@ -301,14 +276,16 @@ export default function CrewScreen() {
                           e.preventDefault();
                           e.stopPropagation();
                           // Optimistic update
-                          setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+                          setGoals((prev) =>
+                            prev.filter((g) => g.id !== goal.id),
+                          );
                           await goalsService.deleteGoal(goal.id);
                         }}
                         activeOpacity={0.7}
                       >
                         <IconSymbol
                           name="xmark.circle.fill"
-                          size={24}
+                          size={20}
                           color="#FF3B30"
                         />
                       </TouchableOpacity>
@@ -421,10 +398,21 @@ export default function CrewScreen() {
                 No long-term goals yet
               </Text>
               <TouchableOpacity
-                style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                style={[
+                  styles.addButton,
+                  { backgroundColor: colors.primary, marginTop: 12 },
+                ]}
                 onPress={() => setShowLongTermGoal(true)}
               >
-                <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Goals</Text>
+                <Text
+                  style={{
+                    color: colors.background,
+                    fontSize: 14,
+                    fontWeight: "600",
+                  }}
+                >
+                  Add Goals
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -562,12 +550,16 @@ export default function CrewScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               This Week
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowWeeklyGoals(true)}
               style={styles.addIconButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+              <IconSymbol
+                name="plus.circle.fill"
+                size={24}
+                color={colors.primary}
+              />
             </TouchableOpacity>
           </View>
           <ScrollView
@@ -644,14 +636,16 @@ export default function CrewScreen() {
                       e.preventDefault();
                       e.stopPropagation();
                       // Optimistic update
-                      setWeeklyGoals((prev) => prev.filter((g) => g.id !== goal.id));
+                      setWeeklyGoals((prev) =>
+                        prev.filter((g) => g.id !== goal.id),
+                      );
                       await goalsService.deleteGoal(goal.id);
                     }}
                     activeOpacity={0.7}
                   >
                     <IconSymbol
                       name="xmark.circle.fill"
-                      size={22}
+                      size={20}
                       color="#FF3B30"
                     />
                   </TouchableOpacity>
@@ -760,10 +754,21 @@ export default function CrewScreen() {
                   No weekly goals set
                 </Text>
                 <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                  style={[
+                    styles.addButton,
+                    { backgroundColor: colors.primary, marginTop: 12 },
+                  ]}
                   onPress={() => setShowWeeklyGoals(true)}
                 >
-                  <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Weekly Goals</Text>
+                  <Text
+                    style={{
+                      color: colors.background,
+                      fontSize: 14,
+                      fontWeight: "600",
+                    }}
+                  >
+                    Add Weekly Goals
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -776,12 +781,16 @@ export default function CrewScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Daily Rituals
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowDailyRituals(true)}
               style={styles.addIconButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+              <IconSymbol
+                name="plus.circle.fill"
+                size={24}
+                color={colors.primary}
+              />
             </TouchableOpacity>
           </View>
           <View style={styles.sectionHeader}>
@@ -824,7 +833,9 @@ export default function CrewScreen() {
                       e.preventDefault();
                       e.stopPropagation();
                       // Optimistic update
-                      setHabits((prev) => prev.filter((h) => h.id !== habit.id));
+                      setHabits((prev) =>
+                        prev.filter((h) => h.id !== habit.id),
+                      );
                       await goalsService.deleteHabit(habit.id);
                     }}
                     activeOpacity={0.7}
@@ -880,10 +891,21 @@ export default function CrewScreen() {
                   No daily rituals yet
                 </Text>
                 <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                  style={[
+                    styles.addButton,
+                    { backgroundColor: colors.primary, marginTop: 12 },
+                  ]}
                   onPress={() => setShowDailyRituals(true)}
                 >
-                  <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Rituals</Text>
+                  <Text
+                    style={{
+                      color: colors.background,
+                      fontSize: 14,
+                      fontWeight: "600",
+                    }}
+                  >
+                    Add Rituals
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -896,12 +918,16 @@ export default function CrewScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Today's Focus
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowTodaysGoals(true)}
               style={styles.addIconButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+              <IconSymbol
+                name="plus.circle.fill"
+                size={24}
+                color={colors.primary}
+              />
             </TouchableOpacity>
           </View>
           {isLoadingInsights ? (
@@ -938,7 +964,7 @@ export default function CrewScreen() {
                 >
                   <IconSymbol
                     name="xmark.circle.fill"
-                    size={20}
+                    size={18}
                     color="#FF3B30"
                   />
                 </TouchableOpacity>
@@ -986,10 +1012,21 @@ export default function CrewScreen() {
                 No tasks for today
               </Text>
               <TouchableOpacity
-                style={[styles.addButton, { backgroundColor: colors.primary, marginTop: 12 }]}
+                style={[
+                  styles.addButton,
+                  { backgroundColor: colors.primary, marginTop: 12 },
+                ]}
                 onPress={() => setShowTodaysGoals(true)}
               >
-                <Text style={{ color: colors.background, fontSize: 14, fontWeight: '600' }}>Add Tasks</Text>
+                <Text
+                  style={{
+                    color: colors.background,
+                    fontSize: 14,
+                    fontWeight: "600",
+                  }}
+                >
+                  Add Tasks
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1116,13 +1153,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     position: "relative",
+    overflow: "visible",
   },
   goalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 4,
-    paddingRight: 36,
+    paddingRight: 48,
   },
   goalTitle: {
     fontSize: 20,
@@ -1234,6 +1272,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     position: "relative",
+    overflow: "visible",
   },
   weeklyGoalContent: {
     flex: 1,
@@ -1243,7 +1282,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-    paddingRight: 36,
+    paddingRight: 48,
   },
   weeklyGoalTitle: {
     fontSize: 16,
@@ -1294,6 +1333,7 @@ const styles = StyleSheet.create({
     paddingRight: 42,
     borderRadius: 12,
     position: "relative",
+    overflow: "visible",
   },
   habitName: {
     fontSize: 14,
@@ -1308,6 +1348,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     position: "relative",
+    overflow: "visible",
   },
   taskContent: {
     flex: 1,

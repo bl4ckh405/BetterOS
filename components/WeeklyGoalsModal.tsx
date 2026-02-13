@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -88,27 +88,33 @@ export default function WeeklyGoalsModal({ visible, onClose, onComplete }: Weekl
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <IconSymbol name="xmark" size={20} color={colors.text} />
-            </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={[styles.weekRange, { color: colors.textSecondary }]}>
-                {getWeekRange()}
-              </Text>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>
-                Weekly Goals
-              </Text>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={0}
+          >
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <IconSymbol name="xmark" size={20} color={colors.text} />
+              </TouchableOpacity>
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                <Text style={[styles.weekRange, { color: colors.textSecondary }]}>
+                  {getWeekRange()}
+                </Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>
+                  Weekly Goals
+                </Text>
+              </View>
+              <View style={{ width: 40 }} />
             </View>
-            <View style={{ width: 40 }} />
-          </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.content} 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               Seven days to make progress.
             </Text>
@@ -199,25 +205,26 @@ export default function WeeklyGoalsModal({ visible, onClose, onComplete }: Weekl
                 Focus on 1-2 meaningful goals per week. Quality over quantity.
               </Text>
             </View>
-          </ScrollView>
+            </ScrollView>
 
-          <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-            <TouchableOpacity
-              onPress={handleSubmit}
-              disabled={isSubmitting || goals.every(g => !g.title.trim())}
-              style={[
-                styles.submitButton,
-                { backgroundColor: colors.accent.stoic },
-                (isSubmitting || goals.every(g => !g.title.trim())) && { opacity: 0.5 }
-              ]}
-            >
-              <Text style={styles.submitButtonText}>
-                {isSubmitting ? 'Saving...' : 'Set Weekly Goals'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+            <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={isSubmitting || goals.every(g => !g.title.trim())}
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: colors.accent.stoic },
+                  (isSubmitting || goals.every(g => !g.title.trim())) && { opacity: 0.5 }
+                ]}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isSubmitting ? 'Saving...' : 'Set Weekly Goals'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

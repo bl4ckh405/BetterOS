@@ -1,6 +1,7 @@
 import { databaseService } from './database';
 
-const API_BASE_URL = __DEV__ ? 'http://192.168.0.104:3000/api' : 'https://your-production-api.com/api';
+const API_BASE_URL = 'https://betteros-production.up.railway.app/api';
+const REQUEST_TIMEOUT = 60000; // 60 seconds timeout
 
 export interface CoachData {
   id: string;
@@ -86,8 +87,10 @@ export class APIService {
         throw new Error('Coach not found');
       }
 
-      // Get user's Orbit profile for context
       const userProfile = await databaseService.getUserProfile();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
       const response = await fetch(`${API_BASE_URL}/chat/message`, {
         method: 'POST',
@@ -116,7 +119,10 @@ export class APIService {
             currentAnxieties: userProfile.current_anxieties,
           } : null
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -124,7 +130,6 @@ export class APIService {
 
       const data = await response.json();
       
-      // Simulate typing animation
       if (onTyping && data.response) {
         const words = data.response.split(' ');
         let currentText = '';
@@ -137,8 +142,10 @@ export class APIService {
       }
 
       return data;
-    } catch (error) {
-      console.error('Failed to send message:', error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout. Please try again.');
+      }
       throw new Error('Failed to send message. Please try again.');
     }
   }

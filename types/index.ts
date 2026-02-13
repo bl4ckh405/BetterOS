@@ -1,5 +1,6 @@
 export interface UserProfile {
   id: string;
+  name?: string;
   coreValues: string[];
   fiveYearGoal: string;
   currentAnxieties: string[];

@@ -336,21 +336,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     const userMessage = inputText.trim();
     setInputText("");
-    setLoading(true); // Triggers the bubbles animation
+    setLoading(true);
 
-    // Auto scroll to bottom
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
-      // 1. Save User Message
       await databaseService.saveMessage({
         session_id: sessionId,
         content: userMessage,
         role: "user",
       });
 
-      // 2. Send to API (Ignore streaming callback for cleaner UI, just wait for completion)
-      // The realtime subscription will pick up the final message when it's inserted into DB
       await APIService.sendMessage(coachId, userMessage, sessionId, () => {});
     } catch (error) {
       console.error("Error sending message:", error);

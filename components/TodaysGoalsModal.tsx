@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -55,33 +55,39 @@ export default function TodaysGoalsModal({ visible, onClose, onComplete }: Today
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <IconSymbol name="xmark" size={20} color={colors.text} />
-            </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </Text>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>
-                Today's Focus
-              </Text>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={0}
+          >
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <IconSymbol name="xmark" size={20} color={colors.text} />
+              </TouchableOpacity>
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                <Text style={[styles.greeting, { color: colors.textSecondary }]}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>
+                  Today's Focus
+                </Text>
+              </View>
+              <View style={{ width: 40 }} />
             </View>
-            <View style={{ width: 40 }} />
-          </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.content} 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               Win the day.
             </Text>
             
             <Text style={[styles.mainTitle, { color: colors.text }]}>
-              <Text style={{ color: colors.accent.boss }}>Focus on what matters</Text> most. 3-5 tasks is the sweet spot.
+              <Text style={{ color: colors.primary }}>Focus on what matters</Text> most. 3-5 tasks is the sweet spot.
             </Text>
 
             <Text style={[styles.label, { color: colors.text }]}>
@@ -91,8 +97,8 @@ export default function TodaysGoalsModal({ visible, onClose, onComplete }: Today
             {tasks.map((task, index) => (
               <View key={index} style={[styles.taskCard, { backgroundColor: colors.surface }]}>
                 <View style={styles.taskHeader}>
-                  <View style={[styles.taskNumber, { backgroundColor: colors.accent.boss + '20' }]}>
-                    <Text style={[styles.taskNumberText, { color: colors.accent.boss }]}>
+                  <View style={[styles.taskNumber, { backgroundColor: colors.primary + '20' }]}>
+                    <Text style={[styles.taskNumberText, { color: colors.primary }]}>
                       {index + 1}
                     </Text>
                   </View>
@@ -137,30 +143,31 @@ export default function TodaysGoalsModal({ visible, onClose, onComplete }: Today
             )}
 
             <View style={styles.tipCard}>
-              <IconSymbol name="star.fill" size={20} color={colors.accent.boss} />
+              <IconSymbol name="star.fill" size={20} color={colors.primary} />
               <Text style={[styles.tipText, { color: colors.textSecondary }]}>
                 Pro tip: Start with your most important task. Eat that frog first.
               </Text>
             </View>
-          </ScrollView>
+            </ScrollView>
 
-          <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-            <TouchableOpacity
-              onPress={handleSubmit}
-              disabled={isSubmitting || tasks.every(t => !t.title.trim())}
-              style={[
-                styles.submitButton,
-                { backgroundColor: colors.accent.boss },
-                (isSubmitting || tasks.every(t => !t.title.trim())) && { opacity: 0.5 }
-              ]}
-            >
-              <Text style={styles.submitButtonText}>
-                {isSubmitting ? 'Saving...' : 'Lock It In'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+            <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={isSubmitting || tasks.every(t => !t.title.trim())}
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: colors.primary },
+                  (isSubmitting || tasks.every(t => !t.title.trim())) && { opacity: 0.5 }
+                ]}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isSubmitting ? 'Saving...' : 'Lock It In'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

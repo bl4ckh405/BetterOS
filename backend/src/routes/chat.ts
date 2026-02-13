@@ -32,8 +32,6 @@ chatRoutes.post('/sessions', async (req, res) => {
 // POST /api/chat/message - Send message to coach
 chatRoutes.post('/message', async (req, res) => {
   try {
-    console.log('📨 Received message request');
-    
     const { coachId, message, sessionId, coach: coachData, userContext }: SendMessageRequest & { coach?: any; userContext?: any } = req.body;
     
     if (!message) {
@@ -44,18 +42,8 @@ chatRoutes.post('/message', async (req, res) => {
       return res.status(400).json({ error: 'Coach data is required' });
     }
 
-    console.log('✅ Using coach:', coachData.name);
-    if (userContext) {
-      console.log('👤 User context provided:', {
-        coreValues: userContext.coreValues?.length || 0,
-        hasGoals: !!(userContext.fiveYearGoal || userContext.oneYearGoal),
-      });
-    }
-
-    // Use provided sessionId or get from Supabase
     let currentSessionId = sessionId;
     
-    // Get conversation history from Supabase
     const { data: messages } = await supabase
       .from('messages')
       .select('*')
@@ -70,13 +58,8 @@ chatRoutes.post('/message', async (req, res) => {
       coachId: msg.coach_id || coachId,
       sessionId: msg.session_id
     }));
-
-    console.log('📚 Conversation history length:', conversationHistory.length);
-    console.log('🤖 Generating AI response...');
     
     const aiResponse = await aiService.generateResponse(coachData, message, conversationHistory, userContext);
-    
-    console.log('✅ AI response generated');
 
     const { data: savedMessage, error: saveError } = await supabase
       .from('messages')
@@ -88,19 +71,14 @@ chatRoutes.post('/message', async (req, res) => {
       .select()
       .single();
 
-    if (saveError) {
-      console.error('❌ Error saving message:', saveError);
-      throw saveError;
-    }
-
-    console.log('💾 Message saved to database:', savedMessage.id);
+    if (saveError) throw saveError;
 
     res.json({
       sessionId: currentSessionId,
       response: aiResponse,
     });
-  } catch (error) {
-    console.error('❌ Error processing message:', error);
+  } catch (error: any) {
+    console.error('Error processing message:', error);
     res.status(500).json({ error: 'Failed to process message' });
   }
 });

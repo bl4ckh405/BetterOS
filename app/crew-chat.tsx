@@ -8,6 +8,8 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +29,50 @@ interface Message {
   timestamp: Date;
 }
 
+const TypingIndicator = ({ color, backgroundColor }: { color: string; backgroundColor: string }) => {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animate = (dot: Animated.Value, delay: number) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(dot, {
+            toValue: -6,
+            duration: 400,
+            useNativeDriver: true,
+            easing: Easing.ease,
+            delay: delay,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+            easing: Easing.ease,
+          }),
+        ]),
+      ).start();
+    };
+
+    animate(dot1, 0);
+    animate(dot2, 200);
+    animate(dot3, 400);
+  }, []);
+
+  return (
+    <View style={[styles.messageContainer, styles.assistantMessage]}>
+      <View style={[styles.messageBubble, { backgroundColor }]}>
+        <View style={styles.typingIndicator}>
+          <Animated.View style={[styles.typingDot, { backgroundColor: color, transform: [{ translateY: dot1 }] }]} />
+          <Animated.View style={[styles.typingDot, { backgroundColor: color, transform: [{ translateY: dot2 }] }]} />
+          <Animated.View style={[styles.typingDot, { backgroundColor: color, transform: [{ translateY: dot3 }] }]} />
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export default function CrewChatScreen() {
   const { modeId, modeName, modeColor } = useLocalSearchParams<{
     modeId: string;
@@ -38,6 +84,7 @@ export default function CrewChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
   const flatListRef = useRef<FlatList>(null);
 
@@ -110,6 +157,7 @@ export default function CrewChatScreen() {
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
     setLoading(true);
+    setIsTyping(true);
 
     // Save user message to shared session
     await crewService.saveMessage(modeId as 'boss' | 'creative' | 'stoic', 'user', userMessage.content);
@@ -132,6 +180,7 @@ export default function CrewChatScreen() {
         conversationHistory,
       );
 
+      setIsTyping(false);
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: response,
@@ -147,6 +196,7 @@ export default function CrewChatScreen() {
       setTimeout(() => flatListRef.current?.scrollToEnd(), 100);
     } catch (error) {
       console.error("Error sending message:", error);
+      setIsTyping(false);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: "Sorry, I encountered an error. Please try again.",
@@ -328,6 +378,11 @@ export default function CrewChatScreen() {
           removeClippedSubviews={true}
           maxToRenderPerBatch={10}
           windowSize={10}
+          ListFooterComponent={
+            isTyping ? (
+              <TypingIndicator color={colors.textTertiary} backgroundColor={colors.surface} />
+            ) : null
+          }
         />
 
         {/* Input */}
@@ -475,5 +530,18 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
+  },
+  typingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 12,
+    gap: 3,
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 3,
   },
 });

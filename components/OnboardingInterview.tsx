@@ -12,11 +12,16 @@ import {
   TouchableOpacity,
   UIManager,
   View,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useOrbit } from "../contexts/OrbitContext";
 import { useSubscriptionGate } from "./SubscriptionGate";
 import { IconSymbol } from "./ui/icon-symbol";
+import TodaysGoalsModal from "./TodaysGoalsModal";
+import WeeklyGoalsModal from "./WeeklyGoalsModal";
+import LongTermGoalModal from "./LongTermGoalModal";
+import DailyRitualsModal from "./DailyRitualsModal";
 
 if (
   Platform.OS === "android" &&
@@ -52,6 +57,13 @@ const INTERVIEW_STEPS: OnboardingStep[] = [
     title: "Welcome to BetterOS",
     subtitle: "Your personal Life Operating System starts here.",
     tip: "Takes 2 minutes to build your custom AI crew.",
+  },
+  {
+    id: "user_name",
+    type: "text",
+    title: "What should we call you?",
+    subtitle: "Your name helps personalize your experience.",
+    placeholder: "Enter your name...",
   },
   {
     id: "core_values",
@@ -163,6 +175,13 @@ const INTERVIEW_STEPS: OnboardingStep[] = [
       "Casual & Friendly",
     ],
   },
+  {
+    id: "notifications",
+    type: "info",
+    title: "Stay on track with reminders",
+    subtitle: "Get notified for daily check-ins, goals, and accountability.",
+    tip: "You can change this anytime in settings.",
+  },
 ];
 
 const ProcessingScreen = ({ colors }: { colors: any }) => {
@@ -201,7 +220,7 @@ const ProcessingScreen = ({ colors }: { colors: any }) => {
 
 export const OnboardingInterview: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { setUserProfile } = useOrbit();
+  const { setUserProfile, loadUserProfile } = useOrbit();
   const { PaywallComponent } = useSubscriptionGate();
   const { colors } = useTheme();
 
@@ -212,12 +231,85 @@ export const OnboardingInterview: React.FC = () => {
   >({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showDailyGoals, setShowDailyGoals] = useState(false);
+  const [showWeeklyGoals, setShowWeeklyGoals] = useState(false);
+  const [showLongTermGoal, setShowLongTermGoal] = useState(false);
+  const [showDailyRituals, setShowDailyRituals] = useState(false);
+  const [requestingNotifications, setRequestingNotifications] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const currentStep = INTERVIEW_STEPS[currentStepIndex];
+  const currentStep = INTERVIEW_STEPS[currentStepIndex] || INTERVIEW_STEPS[0];
   const isLastStep = currentStepIndex === INTERVIEW_STEPS.length - 1;
+
+  // Load saved progress on mount
+  useEffect(() => {
+    loadOnboardingProgress();
+  }, []);
+
+  const loadOnboardingProgress = async () => {
+    console.log('🔍 Loading onboarding progress');
+    try {
+      const userId = await import("../services/auth").then((m) =>
+        m.authService.getUserId(),
+      );
+      const { data } = await databaseService.supabase
+        .from("user_profiles")
+        .select("onboarding_step, onboarding_data, metadata")
+        .eq("user_id", userId)
+        .single();
+
+      const isCompleted = data?.metadata?.onboarding_completed === true;
+
+      console.log('📊 Onboarding data from DB:', {
+        step: data?.onboarding_step,
+        completed: isCompleted,
+        hasData: !!data?.onboarding_data
+      });
+
+      // Don't load progress if onboarding is already completed
+      if (isCompleted) {
+        console.log('✅ Onboarding already completed, skipping progress load');
+        return;
+      }
+
+      if (data?.onboarding_step) {
+        console.log('📍 Resuming from step:', data.onboarding_step);
+        setCurrentStepIndex(data.onboarding_step);
+      }
+      if (data?.onboarding_data) {
+        const saved = data.onboarding_data;
+        if (saved.selections) setSelections(saved.selections);
+        if (saved.singleSelections) setSingleSelections(saved.singleSelections);
+        if (saved.textInputs) setTextInputs(saved.textInputs);
+        console.log('💾 Restored saved selections');
+      }
+    } catch (error) {
+      console.error("❌ Error loading onboarding progress:", error);
+    }
+  };
+
+  const saveOnboardingProgress = async () => {
+    try {
+      const userId = await import("../services/auth").then((m) =>
+        m.authService.getUserId(),
+      );
+      await databaseService.supabase
+        .from("user_profiles")
+        .update({
+          onboarding_step: currentStepIndex,
+          onboarding_data: {
+            selections,
+            singleSelections,
+            textInputs,
+          },
+        })
+        .eq("user_id", userId);
+    } catch (error) {
+      console.error("Error saving onboarding progress:", error);
+    }
+  };
 
   useEffect(() => {
     if (currentStep.type === "processing") {
@@ -293,10 +385,33 @@ export const OnboardingInterview: React.FC = () => {
   };
 
   const handleNext = () => {
-    if (isLastStep) {
+    saveOnboardingProgress();
+    if (currentStep.id === "notifications") {
+      handleNotificationPermission();
+    } else if (isLastStep) {
       completeOnboarding();
     } else {
       animateTransition(() => setCurrentStepIndex((prev) => prev + 1));
+    }
+  };
+
+  const handleNotificationPermission = async () => {
+    setRequestingNotifications(true);
+    try {
+      const hasPermission = await import("../services/notifications").then((m) =>
+        m.notificationService.requestPermissions(),
+      );
+      
+      if (hasPermission) {
+        await import("../services/notifications").then((m) =>
+          m.notificationService.scheduleAllNotifications(),
+        );
+      }
+    } catch (error) {
+      console.error("Error requesting notifications:", error);
+    } finally {
+      setRequestingNotifications(false);
+      completeOnboarding();
     }
   };
 
@@ -307,58 +422,116 @@ export const OnboardingInterview: React.FC = () => {
   };
 
   const completeOnboarding = async () => {
-    const profile = {
-      core_values: selections.core_values || [],
-      current_anxieties: [],
-      five_year_goal: "",
-      one_year_goal: "",
-      ten_year_goal: "",
-    };
-
+    console.log('🎯 Starting onboarding completion');
+    console.log('📊 Collected data:', { selections, singleSelections, textInputs });
+    
     try {
-      await databaseService.saveUserProfile(profile);
+      const userId = await import("../services/auth").then((m) =>
+        m.authService.getUserId(),
+      );
 
-      // Save comprehensive onboarding data
+      console.log('💾 Saving complete user profile with all onboarding data');
+      
+      // Prepare metadata object with all onboarding selections
+      const metadata = {
+        life_season: singleSelections.life_season,
+        biggest_challenge: singleSelections.biggest_challenge,
+        energy_pattern: singleSelections.energy_pattern,
+        communication_style: singleSelections.communication_style,
+      };
+
       await databaseService.supabase
         .from("user_profiles")
-        .update({
+        .upsert({
+          user_id: userId,
+          core_values: selections.core_values || [],
+          current_anxieties: [],
+          five_year_goal: "",
+          one_year_goal: "",
+          ten_year_goal: "",
+          name: textInputs.user_name || "",
           work_style: singleSelections.work_style,
           motivation_type: singleSelections.motivation_type,
-          metadata: {
-            life_season: singleSelections.life_season,
-            biggest_challenge: singleSelections.biggest_challenge,
-            energy_pattern: singleSelections.energy_pattern,
-            communication_style: singleSelections.communication_style,
-          },
-        })
-        .eq(
-          "user_id",
-          await import("../services/auth").then((m) =>
-            m.authService.getUserId(),
-          ),
-        );
-
-      // Request notification permissions and schedule notifications
-      const hasPermission = await import("../services/notifications").then((m) =>
-        m.notificationService.requestPermissions(),
-      );
-      
-      if (hasPermission) {
-        await import("../services/notifications").then((m) =>
-          m.notificationService.scheduleAllNotifications(),
-        );
-      }
+          metadata: metadata,
+          onboarding_step: null,
+          onboarding_data: null,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id'
+        });
 
       setUserProfile({
-        coreValues: profile.core_values,
-        currentAnxieties: profile.current_anxieties,
-        fiveYearGoal: profile.five_year_goal,
-        oneYearGoal: profile.one_year_goal,
-        tenYearGoal: profile.ten_year_goal,
+        coreValues: selections.core_values || [],
+        currentAnxieties: [],
+        fiveYearGoal: "",
+        oneYearGoal: "",
+        tenYearGoal: "",
       } as any);
-      setShowPaywall(true);
+
+      console.log('🎯 Showing daily rituals modal');
+      setShowDailyRituals(true);
     } catch (error) {
-      console.error("Error completing onboarding:", error);
+      console.error("❌ Error completing onboarding:", error);
+    }
+  };
+
+  const handleDailyRitualsComplete = () => {
+    setShowDailyRituals(false);
+    setShowDailyGoals(true);
+  };
+
+  const handleDailyGoalsComplete = () => {
+    setShowDailyGoals(false);
+    // Show weekly goals modal
+    setShowWeeklyGoals(true);
+  };
+
+  const handleWeeklyGoalsComplete = () => {
+    console.log('📋 Weekly goals completed, showing paywall');
+    setShowWeeklyGoals(false);
+    setShowPaywall(true);
+  };
+
+  const handlePaywallClose = async () => {
+    console.log('💳 Paywall closed, starting completion process');
+    setShowPaywall(false);
+    try {
+      const userId = await import("../services/auth").then((m) =>
+        m.authService.getUserId(),
+      );
+      
+      console.log('👤 User ID:', userId);
+      console.log('💾 Marking onboarding as complete');
+      
+      const { data: currentProfile } = await databaseService.supabase
+        .from("user_profiles")
+        .select("metadata")
+        .eq("user_id", userId)
+        .single();
+
+      const updatedMetadata = {
+        ...(currentProfile?.metadata || {}),
+        onboarding_completed: true
+      };
+
+      const { error } = await databaseService.supabase
+        .from("user_profiles")
+        .update({ 
+          metadata: updatedMetadata
+        })
+        .eq("user_id", userId);
+      
+      if (error) {
+        console.error('❌ Database update error:', error);
+      } else {
+        console.log('✅ Onboarding marked complete');
+      }
+      
+      console.log('🔄 Reloading user profile');
+      await loadUserProfile();
+      console.log('✅ Onboarding completion process finished');
+    } catch (error) {
+      console.error("❌ Error completing onboarding:", error);
     }
   };
 
@@ -428,6 +601,43 @@ export const OnboardingInterview: React.FC = () => {
 
       case "info":
       default:
+        if (currentStep.id === "notifications") {
+          return (
+            <>
+              <View style={styles.notificationContainer}>
+                <View
+                  style={[
+                    styles.notificationIcon,
+                    { backgroundColor: colors.primary + "20" },
+                  ]}
+                >
+                  <IconSymbol
+                    name="bell.badge.fill"
+                    size={48}
+                    color={colors.primary}
+                  />
+                </View>
+              </View>
+              {currentStep.tip && (
+                <View
+                  style={[
+                    styles.tipBox,
+                    { backgroundColor: colors.primary + "20" },
+                  ]}
+                >
+                  <IconSymbol
+                    name="info.circle.fill"
+                    size={24}
+                    color={colors.primary}
+                  />
+                  <Text style={[styles.tipText, { color: colors.primary }]}>
+                    {currentStep.tip}
+                  </Text>
+                </View>
+              )}
+            </>
+          );
+        }
         return currentStep.tip ? (
           <View
             style={[styles.tipBox, { backgroundColor: colors.primary + "20" }]}
@@ -508,39 +718,84 @@ export const OnboardingInterview: React.FC = () => {
 
       {currentStep.type !== "processing" && (
         <View style={[styles.footer, { paddingBottom: 20 }]}>
+          {currentStep.id === "welcome" && (
+            <TouchableOpacity
+              onPress={() => Linking.openURL('https://betteros.app/terms')}
+              style={styles.disclaimerContainer}
+            >
+              <Text style={[styles.disclaimer, { color: colors.textTertiary }]}>
+                By continuing, you agree to our{' '}
+                <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                  Privacy Policy
+                </Text>
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[
               styles.nextButton,
               { backgroundColor: colors.primary },
-              !canProceed() && {
+              (!canProceed() || requestingNotifications) && {
                 backgroundColor: colors.surface,
                 shadowOpacity: 0,
                 opacity: 0.4,
               },
             ]}
             onPress={handleNext}
-            disabled={!canProceed()}
+            disabled={!canProceed() || requestingNotifications}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.nextButtonText,
                 {
-                  color: canProceed()
-                    ? colors.background
-                    : colors.textSecondary,
+                  color:
+                    canProceed() && !requestingNotifications
+                      ? colors.background
+                      : colors.textSecondary,
                 },
               ]}
             >
-              {isLastStep ? "Complete Profile" : "Continue"}
+              {requestingNotifications
+                ? "Requesting..."
+                : currentStep.id === "notifications"
+                ? "Enable Notifications"
+                : isLastStep
+                ? "Complete Profile"
+                : "Continue"}
             </Text>
           </TouchableOpacity>
         </View>
       )}
 
+      {showDailyRituals && (
+        <DailyRitualsModal
+          visible={showDailyRituals}
+          onClose={() => setShowDailyRituals(false)}
+          onComplete={handleDailyRitualsComplete}
+        />
+      )}
+      {showDailyGoals && (
+        <TodaysGoalsModal
+          visible={showDailyGoals}
+          onClose={() => setShowDailyGoals(false)}
+          onComplete={handleDailyGoalsComplete}
+        />
+      )}
+      {showWeeklyGoals && (
+        <WeeklyGoalsModal
+          visible={showWeeklyGoals}
+          onClose={() => setShowWeeklyGoals(false)}
+          onComplete={handleWeeklyGoalsComplete}
+        />
+      )}
       <PaywallComponent
         visible={showPaywall}
-        onClose={() => setShowPaywall(false)}
+        onClose={handlePaywallClose}
       />
     </View>
   );
@@ -620,4 +875,25 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   nextButtonText: { fontSize: 18, fontWeight: "700" },
+  notificationContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  notificationIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 32,
+  },
+  disclaimerContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 12,
+  },
+  disclaimer: {
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 18,
+  },
 });

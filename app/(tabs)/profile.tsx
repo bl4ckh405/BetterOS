@@ -218,7 +218,17 @@ export default function ProfileScreen() {
 
         {/* Danger Zone */}
         <View style={[styles.section, styles.lastSection]}>
+          <Text style={[styles.sectionTitle, { color: '#EF4444' }]}>
+            Danger Zone
+          </Text>
           <View style={styles.sectionContent}>
+            <SettingItem
+              icon="trash.fill"
+              title="Delete Account"
+              subtitle="Permanently delete your account and data"
+              onPress={() => router.push("/delete-account")}
+              showChevron={false}
+            />
             <TouchableOpacity
               style={[styles.dangerButton, { backgroundColor: colors.surface }]}
               activeOpacity={0.7}

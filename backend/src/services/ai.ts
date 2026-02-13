@@ -64,13 +64,11 @@ INSTRUCTIONS:
   ): Promise<string> {
     try {
       let relevantContext: string[] = [];
+      
       try {
         relevantContext = await ragService.retrieveContext(coach.id, message, 3);
-        if (relevantContext.length > 0) {
-          console.log(`📚 Retrieved ${relevantContext.length} knowledge chunks`);
-        }
       } catch (ragError: any) {
-        console.log('⚠️ RAG retrieval error:', ragError.message);
+        console.log('RAG retrieval error:', ragError.message);
       }
       
       const conversationContext = conversationHistory
@@ -82,7 +80,6 @@ INSTRUCTIONS:
         ? `\n\nRELEVANT KNOWLEDGE FROM YOUR CONTENT:\n${relevantContext.map((ctx, i) => `[${i + 1}] ${ctx}`).join('\n\n')}`
         : '';
 
-      // Add user Orbit context if available
       const orbitContext = userContext ? `\n\nUSER'S ORBIT CONTEXT (Use this to personalize your coaching):
 - Core Values: ${userContext.coreValues?.join(', ') || 'Not set'}
 - 5-Year Goal: ${userContext.fiveYearGoal || 'Not set'}
@@ -101,7 +98,7 @@ Use this context to provide personalized, relevant coaching that aligns with the
 
       return response.text;
     } catch (error: any) {
-      console.error('❌ Error generating response:', error);
+      console.error('Error generating response:', error);
       throw error;
     }
   }

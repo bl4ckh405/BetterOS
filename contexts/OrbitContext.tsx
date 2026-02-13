@@ -26,7 +26,8 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const isOnboarded = userProfile !== null && 
     userProfile.coreValues && 
-    userProfile.coreValues.length > 0;
+    userProfile.coreValues.length > 0 &&
+    (userProfile as any).onboardingCompleted === true;
 
   useEffect(() => {
     initializeAuth();
@@ -48,6 +49,7 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (profile) {
         setUserProfileState({
           id: profile.id,
+          name: (profile as any).name,
           coreValues: profile.core_values,
           tenYearGoal: profile.ten_year_goal,
           fiveYearGoal: profile.five_year_goal,
@@ -57,7 +59,8 @@ export const OrbitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           lastWeeklyCheckIn: profile.last_weekly_checkin,
           createdAt: new Date(profile.created_at),
           updatedAt: new Date(profile.updated_at),
-        });
+          onboardingCompleted: (profile as any).metadata?.onboarding_completed === true,
+        } as any);
       }
     } catch (error) {
       console.error('Error loading user profile:', error);

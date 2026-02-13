@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { revenueCatService } from '@/services/revenuecat';
 import { CustomerInfo } from 'react-native-purchases';
+import Paywall from '@/components/Paywall';
 
 interface SubscriptionContextType {
   isProUser: boolean;
   customerInfo: CustomerInfo | null;
   loading: boolean;
   refreshSubscription: () => Promise<void>;
+  showPaywall: () => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType>({
@@ -14,6 +16,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   customerInfo: null,
   loading: true,
   refreshSubscription: async () => {},
+  showPaywall: () => {},
 });
 
 export const useSubscription = () => useContext(SubscriptionContext);
@@ -22,6 +25,9 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   const [isProUser, setIsProUser] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+
+  const showPaywall = () => setPaywallVisible(true);
 
   const refreshSubscription = async () => {
     try {
@@ -51,8 +57,13 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <SubscriptionContext.Provider value={{ isProUser, customerInfo, loading, refreshSubscription }}>
+    <SubscriptionContext.Provider value={{ isProUser, customerInfo, loading, refreshSubscription, showPaywall }}>
       {children}
+      <Paywall
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onSuccess={() => setPaywallVisible(false)}
+      />
     </SubscriptionContext.Provider>
   );
 };
