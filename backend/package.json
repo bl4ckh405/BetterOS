@@ -7,6 +7,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "postinstall": "npm run build",
     "test": "jest"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "helmet": "^7.1.0",
     "opik": "^1.9.99",
     "opik-gemini": "^1.9.99",
+    "pdf-parse": "^2.4.5",
     "uuid": "^9.0.1",
     "youtube-transcript": "^1.2.1"
   },
