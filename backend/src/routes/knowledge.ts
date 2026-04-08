@@ -3,6 +3,29 @@ import { ragService } from '../services/rag';
 
 const router = Router();
 
+// Ingest PDF document for a coach
+router.post('/ingest/pdf', async (req, res) => {
+  try {
+    const { coachId, pdfUrl, filename } = req.body;
+
+    if (!coachId || !pdfUrl || !filename) {
+      return res.status(400).json({ error: 'coachId, pdfUrl, and filename are required' });
+    }
+
+    console.log(`📄 Starting PDF ingestion: ${filename}`);
+    await ragService.ingestPDF(pdfUrl, coachId, filename);
+    console.log(`✅ PDF ingestion complete`);
+
+    res.json({
+      success: true,
+      message: 'PDF ingested successfully'
+    });
+  } catch (error: any) {
+    console.error('❌ Error ingesting PDF:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
 // Ingest YouTube video for a coach
 router.post('/ingest/video', async (req, res) => {
   try {

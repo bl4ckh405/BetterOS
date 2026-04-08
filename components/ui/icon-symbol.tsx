@@ -68,7 +68,6 @@ const MAPPING = {
   "paintbrush.fill": "palette",
   "mic.fill": "mic",
   "questionmark.circle.fill": "help",
-  "exclamationmark.triangle.fill": "report-problem",
   "info.circle.fill": "info",
   "star.fill": "star",
   "flag.fill": "flag",
@@ -79,8 +78,15 @@ const MAPPING = {
   "bubble.left.fill": "chat-bubble",
   "hand.raised.fill": "pan-tool",
   "doc.text.fill": "description",
+  "doc.text": "description",
   "globe": "language",
   "pencil": "edit",
+  "lock.fill": "lock",
+  "lock": "lock",
+  "lock.shield": "privacy-tip",
+  "sparkles": "auto-awesome",
+  "arrow.clockwise": "refresh",
+  "clock": "access-time",
 } as IconMapping;
 
 /**

@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import Purchases, { CustomerInfo, PurchasesOffering } from 'react-native-purchases';
 
 // Platform-specific API keys (using test key for both at the moment)
@@ -15,6 +15,10 @@ class RevenueCatService {
     try {
       // Use platform-specific API key
       const apiKey = Platform.OS === 'ios' ? IOS_API_KEY : ANDROID_API_KEY;
+      
+      if (__DEV__) {
+        Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+      }
       
       Purchases.configure({ apiKey });
       
@@ -96,6 +100,23 @@ class RevenueCatService {
       await Purchases.logOut();
     } catch (error) {
       console.error('Failed to log out:', error);
+    }
+  }
+
+  async showManageSubscriptions() {
+    try {
+      if (Platform.OS === 'ios') {
+        await Linking.openURL('https://apps.apple.com/account/subscriptions');
+      } else {
+        await Purchases.showManageSubscriptions();
+      }
+    } catch (error) {
+      console.error('Failed to show manage subscriptions:', error);
+      // Fallback
+      const url = Platform.OS === 'ios' 
+        ? 'https://apps.apple.com/account/subscriptions'
+        : 'https://play.google.com/store/account/subscriptions';
+      await Linking.openURL(url);
     }
   }
 

@@ -1,16 +1,15 @@
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { coachRoutes } from './routes/coaches';
+dotenv.config();
+
+import cors from 'cors';
+import express from 'express';
+import helmet from 'helmet';
 import { chatRoutes } from './routes/chat';
-import knowledgeRoutes from './routes/knowledge';
+import { coachRoutes } from './routes/coaches';
 import crewRoutes from './routes/crew';
 import crewChatRoutes from './routes/crew-chat';
+import knowledgeRoutes from './routes/knowledge';
 import standupRoutes from './routes/standup';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(helmet());
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Routes

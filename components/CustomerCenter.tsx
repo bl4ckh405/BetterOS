@@ -16,15 +16,11 @@ import { Platform } from 'react-native';
 
 export default function CustomerCenter() {
   const { colors } = useTheme();
-  const { isProUser, customerInfo, refreshSubscription } = useSubscription();
+  const { isProUser, customerInfo, refreshSubscription, showPaywall } = useSubscription();
 
   const handleManageSubscription = async () => {
     try {
-      if (Platform.OS === 'ios') {
-        await Linking.openURL('https://apps.apple.com/account/subscriptions');
-      } else {
-        await Linking.openURL('https://play.google.com/store/account/subscriptions');
-      }
+      await revenueCatService.showManageSubscriptions();
     } catch (error) {
       Alert.alert('Error', 'Could not open subscription management');
     }
@@ -34,9 +30,16 @@ export default function CustomerCenter() {
     try {
       await revenueCatService.restorePurchases();
       await refreshSubscription();
-      Alert.alert('Success', 'Purchases restored successfully');
+      
+      // Re-fetch pro status to be sure
+      const isPro = await revenueCatService.isProUser();
+      if (isPro) {
+        Alert.alert('Success', 'Purchases restored successfully');
+      } else {
+        Alert.alert('Restore Finished', 'No active subscriptions were found for this account.');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to restore purchases');
+      Alert.alert('Error', 'Failed to restore purchases. Please try again later.');
     }
   };
 
@@ -67,12 +70,16 @@ export default function CustomerCenter() {
                 Current Plan
               </Text>
               <Text style={[styles.statusValue, { color: colors.text }]}>
-                {isProUser ? 'BetterOS Pro' : 'Free'}
+                {isProUser ? 'BetterOS Pro' : 'Free Plan'}
               </Text>
             </View>
-            {isProUser && (
-              <View style={[styles.badge, { backgroundColor: '#007AFF' }]}>
+            {isProUser ? (
+              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
                 <IconSymbol name="checkmark" size={16} color="white" />
+              </View>
+            ) : (
+              <View style={[styles.badge, { backgroundColor: colors.textSecondary + '20' }]}>
+                <IconSymbol name="lock.fill" size={16} color={colors.textSecondary} />
               </View>
             )}
           </View>
@@ -80,6 +87,16 @@ export default function CustomerCenter() {
           <Text style={[styles.statusSubtext, { color: colors.textSecondary }]}>
             {getSubscriptionStatus()}
           </Text>
+
+          {!isProUser && (
+            <TouchableOpacity
+              style={[styles.upgradeButton, { backgroundColor: colors.primary }]}
+              onPress={showPaywall}
+            >
+              <IconSymbol name="sparkles" size={18} color="white" />
+              <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -91,7 +108,9 @@ export default function CustomerCenter() {
             style={[styles.actionButton, { backgroundColor: colors.surface }]}
             onPress={handleManageSubscription}
           >
-            <IconSymbol name="gear" size={20} color={colors.text} />
+            <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
+              <IconSymbol name="gear" size={20} color={colors.primary} />
+            </View>
             <Text style={[styles.actionButtonText, { color: colors.text }]}>
               Manage Subscription
             </Text>
@@ -103,7 +122,9 @@ export default function CustomerCenter() {
           style={[styles.actionButton, { backgroundColor: colors.surface }]}
           onPress={handleRestorePurchases}
         >
-          <IconSymbol name="arrow.clockwise" size={20} color={colors.text} />
+          <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
+            <IconSymbol name="arrow.clockwise" size={20} color={colors.primary} />
+          </View>
           <Text style={[styles.actionButtonText, { color: colors.text }]}>
             Restore Purchases
           </Text>
@@ -191,13 +212,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  upgradeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 20,
+    gap: 10,
+  },
+  upgradeButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
     marginBottom: 12,
     gap: 12,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionButtonText: {
     flex: 1,

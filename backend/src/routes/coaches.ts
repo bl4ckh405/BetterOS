@@ -24,8 +24,11 @@ coachRoutes.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Name and tagline are required' });
     }
 
-    if (!coachData.youtubeChannelUrl) {
-      return res.status(400).json({ error: 'YouTube channel URL is required for knowledge base' });
+    // Require at least one knowledge source
+    const hasYouTube = !!coachData.youtubeChannelUrl;
+    const hasPDFs = coachData.pdfUrls && coachData.pdfUrls.length > 0;
+    if (!hasYouTube && !hasPDFs) {
+      return res.status(400).json({ error: 'At least one knowledge source is required (YouTube channel URL or PDF uploads)' });
     }
 
     const coach = await dataService.createCoach(coachData);

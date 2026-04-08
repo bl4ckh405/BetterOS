@@ -14,6 +14,7 @@ export interface Coach {
   system_prompt: string;
   avatar_url?: string;
   user_id?: string;
+  is_public?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -177,7 +178,7 @@ class DatabaseService {
       const { data, error } = await supabase
         .from('coaches')
         .select('*')
-        .or(`user_id.eq.${userId},user_id.is.null`)
+        .or(`user_id.eq.${userId},user_id.is.null,is_public.eq.true`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

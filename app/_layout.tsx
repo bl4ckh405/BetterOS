@@ -20,6 +20,14 @@ import WeeklyCheckInModal from '@/components/WeeklyCheckInModal';
 
 export const unstable_settings = {
   anchor: '(tabs)',
+  initialRouteName: '(tabs)',
+};
+
+// Disable SSR for web to prevent AsyncStorage/Supabase errors
+export const unstable_runtimeConfig = {
+  web: {
+    output: 'single',
+  },
 };
 
 function AppContent() {

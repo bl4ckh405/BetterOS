@@ -114,10 +114,17 @@ export default function Paywall({ visible, onClose, onSuccess }: PaywallProps) {
       setPurchasing(true);
       await revenueCatService.restorePurchases();
       await refreshSubscription();
-      Alert.alert("Success", "Purchases restored successfully");
-      onClose();
+      
+      const isPro = await revenueCatService.isProUser();
+      if (isPro) {
+        Alert.alert("Success", "Purchases restored successfully");
+        onSuccess?.();
+        onClose();
+      } else {
+        Alert.alert("Restore Finished", "No active subscriptions were found for this account.");
+      }
     } catch (error) {
-      Alert.alert("Restore Failed", "No purchases found to restore");
+      Alert.alert("Restore Failed", "We couldn't find any existing purchases to restore.");
     } finally {
       setPurchasing(false);
     }
@@ -226,7 +233,7 @@ export default function Paywall({ visible, onClose, onSuccess }: PaywallProps) {
               <View
                 style={[styles.iconBubble, { backgroundColor: paywallColors.primary + '30' }]}
               >
-                <IconSymbol name="lock.fill" size={16} color={paywallColors.primary} />
+                <IconSymbol name="sparkles" size={18} color={paywallColors.primary} />
               </View>
               <View style={styles.timelineContent}>
                 <Text style={[styles.timelineTitle, { color: paywallColors.text }]}>
@@ -245,7 +252,7 @@ export default function Paywall({ visible, onClose, onSuccess }: PaywallProps) {
               <View
                 style={[styles.iconBubble, { backgroundColor: paywallColors.primary + '30' }]}
               >
-                <IconSymbol name="bell.fill" size={16} color={paywallColors.primary} />
+                <IconSymbol name="bell.fill" size={18} color={paywallColors.primary} />
               </View>
               <View style={styles.timelineContent}>
                 <Text style={[styles.timelineTitle, { color: paywallColors.text }]}>
@@ -264,7 +271,7 @@ export default function Paywall({ visible, onClose, onSuccess }: PaywallProps) {
               <View
                 style={[styles.iconBubble, { backgroundColor: paywallColors.primary + '30' }]}
               >
-                <IconSymbol name="star.fill" size={16} color={paywallColors.primary} />
+                <IconSymbol name="star.fill" size={18} color={paywallColors.primary} />
               </View>
               <View style={styles.timelineContent}>
                 <Text style={[styles.timelineTitle, { color: paywallColors.text }]}>
@@ -281,6 +288,15 @@ export default function Paywall({ visible, onClose, onSuccess }: PaywallProps) {
           </View>
 
           {/* Pricing Options */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: paywallColors.text }]}>
+              Select Your Plan
+            </Text>
+            <Text style={[styles.sectionSubtitle, { color: paywallColors.textSecondary }]}>
+              All plans include full access to all features
+            </Text>
+          </View>
+
           {loading ? (
             <ActivityIndicator
               size="large"
@@ -496,6 +512,20 @@ const styles = StyleSheet.create({
   timelineDesc: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  // Pricing Section
+  sectionHeader: {
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    opacity: 0.8,
   },
   // Package Styles
   packagesContainer: {

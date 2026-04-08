@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { CoachData, ChatMessage, ChatSession, CreateCoachRequest } from '../types';
+import { ChatMessage, ChatSession, CoachData, CreateCoachRequest } from '../types';
 import { aiService } from './ai';
 import { ragService } from './rag';
 import { supabase } from './supabase';
@@ -119,8 +119,9 @@ export class DataService {
       color: coach.color,
       system_prompt: systemPrompt,
       avatar_url: coach.image,
-      youtube_channel_url: data.youtubeChannelUrl,
+      youtube_channel_url: data.youtubeChannelUrl || null,
       user_id: data.userId || null,
+      is_public: data.isPublic ?? false,
     });
 
     if (error) throw error;
@@ -129,8 +130,18 @@ export class DataService {
     if (data.youtubeChannelUrl) {
       console.log(`📥 Auto-ingesting YouTube channel for coach: ${coach.name}`);
       ragService.ingestYouTubeChannel(data.youtubeChannelUrl, id, 50)
-        .then(() => console.log(`✅ Knowledge base ready for ${coach.name}`))
+        .then(() => console.log(`✅ YouTube knowledge base ready for ${coach.name}`))
         .catch(err => console.error(`❌ Failed to ingest channel:`, err.message));
+    }
+
+    // Auto-ingest PDFs if provided
+    if (data.pdfUrls && data.pdfUrls.length > 0) {
+      console.log(`📄 Auto-ingesting ${data.pdfUrls.length} PDF(s) for coach: ${coach.name}`);
+      for (const pdfFile of data.pdfUrls) {
+        ragService.ingestPDF(pdfFile.url, id, pdfFile.filename)
+          .then(() => console.log(`✅ PDF "${pdfFile.filename}" ingested for ${coach.name}`))
+          .catch(err => console.error(`❌ Failed to ingest PDF "${pdfFile.filename}":`, err.message));
+      }
     }
 
     return coach;

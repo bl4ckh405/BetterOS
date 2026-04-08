@@ -263,11 +263,15 @@ CREATE TABLE coaches (
   tagline TEXT,
   personality TEXT,
   expertise TEXT,
+  background TEXT,
+  conversation_style TEXT,
   system_prompt TEXT,
   color TEXT,
   avatar_url TEXT,
+  youtube_channel_url TEXT,
   is_public BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 ```
 

@@ -41,6 +41,8 @@ export interface CreateCoachRequest {
   color: string;
   image?: string;
   youtubeChannelUrl?: string;
+  pdfUrls?: { url: string; filename: string }[];
+  isPublic?: boolean;
   userId?: string;
 }
 

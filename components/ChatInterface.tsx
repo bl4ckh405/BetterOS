@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import { useTheme } from "../hooks/use-theme";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { APIService } from "../services/api";
 import { databaseService } from "../services/database";
 import { supabase } from "../services/supabase";
@@ -232,6 +233,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onBack,
 }) => {
   const { colors } = useTheme();
+  const { isProUser, showPaywall } = useSubscription();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -334,6 +336,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return;
     }
 
+    if (!isProUser) {
+      showPaywall();
+      return;
+    }
+
     const userMessage = inputText.trim();
     setInputText("");
     setLoading(true);
@@ -400,7 +407,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </Text>
         </View>
         <TouchableOpacity
-          onPress={() => setShowVoiceCall(true)}
+          onPress={() => {
+            if (isProUser) {
+              setShowVoiceCall(true);
+            } else {
+              showPaywall();
+            }
+          }}
           style={[styles.callButton, { backgroundColor: coachColor }]}
         >
           <IconSymbol name="phone.fill" size={18} color="white" />

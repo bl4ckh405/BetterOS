@@ -1,6 +1,6 @@
 import { databaseService } from './database';
 
-const API_BASE_URL = 'https://betteros-production.up.railway.app/api';
+const API_BASE_URL = 'https://betteros.onrender.com/api';
 const REQUEST_TIMEOUT = 60000; // 60 seconds timeout
 
 export interface CoachData {
@@ -146,7 +146,8 @@ export class APIService {
       if (error.name === 'AbortError') {
         throw new Error('Request timeout. Please try again.');
       }
-      throw new Error('Failed to send message. Please try again.');
+      console.error('Error in sendMessage:', error);
+      throw new Error(`Failed to send message: ${error.message || 'Unknown error'}`);
     }
   }
 

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -12,16 +13,14 @@ import {
   TouchableOpacity,
   UIManager,
   View,
-  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useOrbit } from "../contexts/OrbitContext";
-import { useSubscriptionGate } from "./SubscriptionGate";
-import { IconSymbol } from "./ui/icon-symbol";
-import TodaysGoalsModal from "./TodaysGoalsModal";
-import WeeklyGoalsModal from "./WeeklyGoalsModal";
-import LongTermGoalModal from "./LongTermGoalModal";
 import DailyRitualsModal from "./DailyRitualsModal";
+import { useSubscriptionGate } from "./SubscriptionGate";
+import TodaysGoalsModal from "./TodaysGoalsModal";
+import { IconSymbol } from "./ui/icon-symbol";
+import WeeklyGoalsModal from "./WeeklyGoalsModal";
 
 if (
   Platform.OS === "android" &&
@@ -104,10 +103,10 @@ const INTERVIEW_STEPS: OnboardingStep[] = [
     subtitle: "Analyzing your values and life context.",
   },
   {
-    id: "biggest_challenge",
-    type: "single-select",
-    title: "What's your biggest challenge right now?",
-    subtitle: "We'll prioritize helping you with this first.",
+    id: "current_anxieties",
+    type: "multi-select",
+    title: "What are your current anxieties and challenges?",
+    subtitle: "We'll help you address these throughout your journey.",
     options: [
       "Overwhelm",
       "Lack of Clarity",
@@ -117,7 +116,14 @@ const INTERVIEW_STEPS: OnboardingStep[] = [
       "Distraction",
       "Decision Fatigue",
       "Consistency",
+      "Imposter Syndrome",
+      "Work-Life Balance",
+      "Financial Stress",
+      "Relationship Issues",
+      "Health Concerns",
+      "Creative Blocks",
     ],
+    minSelections: 1,
   },
   {
     id: "work_style",
@@ -160,6 +166,28 @@ const INTERVIEW_STEPS: OnboardingStep[] = [
       "Freedom",
       "Recognition",
     ],
+  },
+  {
+    id: "ten_year_goal",
+    type: "text",
+    title: "What's your 10-year vision?",
+    subtitle: "Where do you want to be in a decade?",
+    placeholder:
+      "Describe your ultimate goal or vision for 10 years from now...",
+  },
+  {
+    id: "five_year_goal",
+    type: "text",
+    title: "What's your 5-year goal?",
+    subtitle: "What major milestone do you want to achieve in 5 years?",
+    placeholder: "Describe your key goal for the next 5 years...",
+  },
+  {
+    id: "one_year_goal",
+    type: "text",
+    title: "What's your 1-year goal?",
+    subtitle: "What do you want to accomplish this year?",
+    placeholder: "Describe your primary goal for the next year...",
   },
   {
     id: "communication_style",
@@ -217,7 +245,6 @@ const ProcessingScreen = ({ colors }: { colors: any }) => {
   );
 };
 
-
 export const OnboardingInterview: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { setUserProfile, loadUserProfile } = useOrbit();
@@ -249,7 +276,7 @@ export const OnboardingInterview: React.FC = () => {
   }, []);
 
   const loadOnboardingProgress = async () => {
-    console.log('🔍 Loading onboarding progress');
+    console.log("🔍 Loading onboarding progress");
     try {
       const userId = await import("../services/auth").then((m) =>
         m.authService.getUserId(),
@@ -262,20 +289,20 @@ export const OnboardingInterview: React.FC = () => {
 
       const isCompleted = data?.metadata?.onboarding_completed === true;
 
-      console.log('📊 Onboarding data from DB:', {
+      console.log("📊 Onboarding data from DB:", {
         step: data?.onboarding_step,
         completed: isCompleted,
-        hasData: !!data?.onboarding_data
+        hasData: !!data?.onboarding_data,
       });
 
       // Don't load progress if onboarding is already completed
       if (isCompleted) {
-        console.log('✅ Onboarding already completed, skipping progress load');
+        console.log("✅ Onboarding already completed, skipping progress load");
         return;
       }
 
       if (data?.onboarding_step) {
-        console.log('📍 Resuming from step:', data.onboarding_step);
+        console.log("📍 Resuming from step:", data.onboarding_step);
         setCurrentStepIndex(data.onboarding_step);
       }
       if (data?.onboarding_data) {
@@ -283,7 +310,7 @@ export const OnboardingInterview: React.FC = () => {
         if (saved.selections) setSelections(saved.selections);
         if (saved.singleSelections) setSingleSelections(saved.singleSelections);
         if (saved.textInputs) setTextInputs(saved.textInputs);
-        console.log('💾 Restored saved selections');
+        console.log("💾 Restored saved selections");
       }
     } catch (error) {
       console.error("❌ Error loading onboarding progress:", error);
@@ -398,10 +425,10 @@ export const OnboardingInterview: React.FC = () => {
   const handleNotificationPermission = async () => {
     setRequestingNotifications(true);
     try {
-      const hasPermission = await import("../services/notifications").then((m) =>
-        m.notificationService.requestPermissions(),
+      const hasPermission = await import("../services/notifications").then(
+        (m) => m.notificationService.requestPermissions(),
       );
-      
+
       if (hasPermission) {
         await import("../services/notifications").then((m) =>
           m.notificationService.scheduleAllNotifications(),
@@ -422,16 +449,20 @@ export const OnboardingInterview: React.FC = () => {
   };
 
   const completeOnboarding = async () => {
-    console.log('🎯 Starting onboarding completion');
-    console.log('📊 Collected data:', { selections, singleSelections, textInputs });
-    
+    console.log("🎯 Starting onboarding completion");
+    console.log("📊 Collected data:", {
+      selections,
+      singleSelections,
+      textInputs,
+    });
+
     try {
       const userId = await import("../services/auth").then((m) =>
         m.authService.getUserId(),
       );
 
-      console.log('💾 Saving complete user profile with all onboarding data');
-      
+      console.log("💾 Saving complete user profile with all onboarding data");
+
       // Prepare metadata object with all onboarding selections
       const metadata = {
         life_season: singleSelections.life_season,
@@ -440,15 +471,14 @@ export const OnboardingInterview: React.FC = () => {
         communication_style: singleSelections.communication_style,
       };
 
-      await databaseService.supabase
-        .from("user_profiles")
-        .upsert({
+      await databaseService.supabase.from("user_profiles").upsert(
+        {
           user_id: userId,
           core_values: selections.core_values || [],
-          current_anxieties: [],
-          five_year_goal: "",
-          one_year_goal: "",
-          ten_year_goal: "",
+          current_anxieties: selections.current_anxieties || [],
+          five_year_goal: textInputs.five_year_goal || "",
+          one_year_goal: textInputs.one_year_goal || "",
+          ten_year_goal: textInputs.ten_year_goal || "",
           name: textInputs.user_name || "",
           work_style: singleSelections.work_style,
           motivation_type: singleSelections.motivation_type,
@@ -456,19 +486,21 @@ export const OnboardingInterview: React.FC = () => {
           onboarding_step: null,
           onboarding_data: null,
           updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id'
-        });
+        },
+        {
+          onConflict: "user_id",
+        },
+      );
 
       setUserProfile({
         coreValues: selections.core_values || [],
-        currentAnxieties: [],
-        fiveYearGoal: "",
-        oneYearGoal: "",
-        tenYearGoal: "",
+        currentAnxieties: selections.current_anxieties || [],
+        fiveYearGoal: textInputs.five_year_goal || "",
+        oneYearGoal: textInputs.one_year_goal || "",
+        tenYearGoal: textInputs.ten_year_goal || "",
       } as any);
 
-      console.log('🎯 Showing daily rituals modal');
+      console.log("🎯 Showing daily rituals modal");
       setShowDailyRituals(true);
     } catch (error) {
       console.error("❌ Error completing onboarding:", error);
@@ -487,22 +519,22 @@ export const OnboardingInterview: React.FC = () => {
   };
 
   const handleWeeklyGoalsComplete = () => {
-    console.log('📋 Weekly goals completed, showing paywall');
+    console.log("📋 Weekly goals completed, showing paywall");
     setShowWeeklyGoals(false);
     setShowPaywall(true);
   };
 
   const handlePaywallClose = async () => {
-    console.log('💳 Paywall closed, starting completion process');
+    console.log("💳 Paywall closed, starting completion process");
     setShowPaywall(false);
     try {
       const userId = await import("../services/auth").then((m) =>
         m.authService.getUserId(),
       );
-      
-      console.log('👤 User ID:', userId);
-      console.log('💾 Marking onboarding as complete');
-      
+
+      console.log("👤 User ID:", userId);
+      console.log("💾 Marking onboarding as complete");
+
       const { data: currentProfile } = await databaseService.supabase
         .from("user_profiles")
         .select("metadata")
@@ -511,25 +543,25 @@ export const OnboardingInterview: React.FC = () => {
 
       const updatedMetadata = {
         ...(currentProfile?.metadata || {}),
-        onboarding_completed: true
+        onboarding_completed: true,
       };
 
       const { error } = await databaseService.supabase
         .from("user_profiles")
-        .update({ 
-          metadata: updatedMetadata
+        .update({
+          metadata: updatedMetadata,
         })
         .eq("user_id", userId);
-      
+
       if (error) {
-        console.error('❌ Database update error:', error);
+        console.error("❌ Database update error:", error);
       } else {
-        console.log('✅ Onboarding marked complete');
+        console.log("✅ Onboarding marked complete");
       }
-      
-      console.log('🔄 Reloading user profile');
+
+      console.log("🔄 Reloading user profile");
       await loadUserProfile();
-      console.log('✅ Onboarding completion process finished');
+      console.log("✅ Onboarding completion process finished");
     } catch (error) {
       console.error("❌ Error completing onboarding:", error);
     }
@@ -720,16 +752,26 @@ export const OnboardingInterview: React.FC = () => {
         <View style={[styles.footer, { paddingBottom: 20 }]}>
           {currentStep.id === "welcome" && (
             <TouchableOpacity
-              onPress={() => Linking.openURL('https://betteros.app/terms')}
+              onPress={() => Linking.openURL("https://betteros.app/terms")}
               style={styles.disclaimerContainer}
             >
               <Text style={[styles.disclaimer, { color: colors.textTertiary }]}>
-                By continuing, you agree to our{' '}
-                <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                By continuing, you agree to our{" "}
+                <Text
+                  style={{
+                    color: colors.primary,
+                    textDecorationLine: "underline",
+                  }}
+                >
                   Terms of Service
-                </Text>
-                {' '}and{' '}
-                <Text style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                </Text>{" "}
+                and{" "}
+                <Text
+                  style={{
+                    color: colors.primary,
+                    textDecorationLine: "underline",
+                  }}
+                >
                   Privacy Policy
                 </Text>
               </Text>
@@ -763,10 +805,10 @@ export const OnboardingInterview: React.FC = () => {
               {requestingNotifications
                 ? "Requesting..."
                 : currentStep.id === "notifications"
-                ? "Enable Notifications"
-                : isLastStep
-                ? "Complete Profile"
-                : "Continue"}
+                  ? "Enable Notifications"
+                  : isLastStep
+                    ? "Complete Profile"
+                    : "Continue"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -793,10 +835,7 @@ export const OnboardingInterview: React.FC = () => {
           onComplete={handleWeeklyGoalsComplete}
         />
       )}
-      <PaywallComponent
-        visible={showPaywall}
-        onClose={handlePaywallClose}
-      />
+      <PaywallComponent visible={showPaywall} onClose={handlePaywallClose} />
     </View>
   );
 };

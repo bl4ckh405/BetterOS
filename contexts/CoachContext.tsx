@@ -71,9 +71,9 @@ export const CoachProvider: React.FC<CoachProviderProps> = ({ children }) => {
           const newCoach = payload.new as Coach;
           const oldCoach = payload.old as Coach;
           
-          // Only process if coach belongs to user or is system coach
-          if (newCoach && newCoach.user_id && newCoach.user_id !== userId) return;
-          if (oldCoach && oldCoach.user_id && oldCoach.user_id !== userId) return;
+          // Only process if coach belongs to user, is public, or is system coach
+          if (newCoach && newCoach.user_id && newCoach.user_id !== userId && !newCoach.is_public) return;
+          if (oldCoach && oldCoach.user_id && oldCoach.user_id !== userId && !oldCoach.is_public) return;
           console.log('🔄 Coach change detected:', payload.eventType, newCoach?.name || oldCoach?.name);
           
           if (payload.eventType === 'INSERT') {

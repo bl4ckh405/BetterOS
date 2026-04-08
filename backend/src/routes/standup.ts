@@ -1,11 +1,6 @@
 import { Router } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabase';
 import { aiService } from '../services/ai';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
 
 export const standupRoutes = Router();
 

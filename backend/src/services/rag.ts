@@ -1,7 +1,7 @@
-import { YoutubeTranscript } from 'youtube-transcript';
-import { google } from 'googleapis';
 import { GoogleGenAI } from '@google/genai';
+import { google } from 'googleapis';
 import { supabase } from './supabase';
+const pdfParse = require('pdf-parse');
 
 interface TranscriptChunk {
   text: string;
@@ -207,6 +207,85 @@ export class RAGService {
     }
     
     return result.embedding.values;
+  }
+
+  async ingestPDF(pdfUrl: string, coachId: string, filename: string): Promise<void> {
+    console.log(`📄 Downloading PDF: ${filename}`);
+
+    const response = await fetch(pdfUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    console.log(`📄 Parsing PDF (${(buffer.length / 1024).toFixed(1)} KB)...`);
+    const pdfData = await pdfParse(buffer);
+    const text = pdfData.text;
+
+    if (!text || text.trim().length === 0) {
+      console.log(`⚠️ Skipping ${filename} - no extractable text`);
+      return;
+    }
+
+    console.log(`✅ Extracted ${text.length} characters from ${pdfData.numpages} pages`);
+
+    // Chunk the text into ~200 word segments
+    const words = text.split(/\s+/).filter((w: string) => w.length > 0);
+    const chunks: { text: string; page: number }[] = [];
+    let currentChunk = '';
+    let wordCount = 0;
+    let chunkIndex = 0;
+
+    for (const word of words) {
+      currentChunk += word + ' ';
+      wordCount++;
+
+      if (wordCount >= 200) {
+        chunks.push({
+          text: currentChunk.trim(),
+          page: chunkIndex,
+        });
+        currentChunk = '';
+        wordCount = 0;
+        chunkIndex++;
+      }
+    }
+
+    if (currentChunk.trim()) {
+      chunks.push({
+        text: currentChunk.trim(),
+        page: chunkIndex,
+      });
+    }
+
+    console.log(`📦 Created ${chunks.length} chunks from PDF, starting embedding...`);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(`🧠 Generating embedding for chunk ${i + 1}/${chunks.length}...`);
+      const embedding = await this.generateEmbedding(chunk.text);
+
+      const { error } = await supabase.from('coach_knowledge').insert({
+        coach_id: coachId,
+        content: chunk.text,
+        embedding,
+        metadata: {
+          source: 'pdf',
+          filename,
+          chunk_index: chunk.page,
+        },
+      });
+
+      if (error) {
+        console.error(`❌ Supabase insert error:`, error);
+        throw error;
+      }
+      console.log(`✅ Chunk ${i + 1}/${chunks.length} inserted`);
+    }
+
+    console.log(`✅ PDF "${filename}" fully ingested with ${chunks.length} chunks`);
   }
 
   async retrieveContext(coachId: string, query: string, topK = 3): Promise<string[]> {
